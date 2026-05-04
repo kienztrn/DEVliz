@@ -1,0 +1,39 @@
+appId: com.kienztrn.multibrowsermanager
+productName: Multi Browser Manager
+directories:
+  buildResources: build
+  output: release
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.ts'
+  - '!tsconfig*.json'
+  - '!.eslintrc*'
+  - '!.prettierrc*'
+  - '!**/*.map'
+asarUnpack:
+  - resources/**
+  - node_modules/better-sqlite3/**
+win:
+  executableName: multi-browser-manager
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+linux:
+  target:
+    - AppImage
+  category: Utility
+publish:
+  provider: github
