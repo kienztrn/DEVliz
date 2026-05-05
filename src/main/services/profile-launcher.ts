@@ -1,6 +1,6 @@
 import { spawn, ChildProcess } from 'node:child_process'
-import { existsSync, mkdirSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, rmSync, symlinkSync, lstatSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import { app } from 'electron'
 import { anonymizeProxy, closeAnonymizedProxy } from 'proxy-chain'
 import { DEFAULT_START_URL, type ProfileRecord, type ProxyRecord } from '@shared/types'
@@ -82,6 +82,35 @@ function buildArgs(
   return args
 }
 
+function prepareLaunchExecutable(profileDir: string, chromiumPath: string): string {
+  if (process.platform !== 'win32') return chromiumPath
+
+  try {
+    const chromeAppDir = dirname(chromiumPath)
+    const linkDir = join(profileDir, 'chrome-app')
+    const linkExe = join(linkDir, basename(chromiumPath))
+
+    if (existsSync(linkExe)) {
+      try {
+        if (lstatSync(linkDir).isSymbolicLink() || lstatSync(linkDir).isDirectory()) {
+          return linkExe
+        }
+      } catch {
+        // fall through and recreate
+      }
+    }
+
+    if (existsSync(linkDir)) {
+      rmSync(linkDir, { recursive: true, force: true })
+    }
+    symlinkSync(chromeAppDir, linkDir, 'junction')
+    if (existsSync(linkExe)) return linkExe
+    return chromiumPath
+  } catch {
+    return chromiumPath
+  }
+}
+
 async function resolveProxyServer(
   proxy: ProxyRecord | null,
 ): Promise<{ server: string | null; anonymizedUrl: string | null }> {
@@ -122,8 +151,9 @@ export async function launchProfile(profile: ProfileRecord): Promise<LaunchResul
   }
 
   const root = profilesRoot()
-  const userDataDir = join(root, profile.id, 'user-data')
-  const extensionDir = join(root, profile.id, 'extension')
+  const profileDir = join(root, profile.id)
+  const userDataDir = join(profileDir, 'user-data')
+  const extensionDir = join(profileDir, 'extension')
   mkdirSync(userDataDir, { recursive: true })
 
   const proxy = profile.proxyId ? getProxy(profile.proxyId) : null
@@ -131,8 +161,9 @@ export async function launchProfile(profile: ProfileRecord): Promise<LaunchResul
 
   const { server, anonymizedUrl } = await resolveProxyServer(proxy)
 
+  const launchExe = prepareLaunchExecutable(profileDir, chromium)
   const args = buildArgs(profile, userDataDir, extensionDir, server)
-  const child = spawn(chromium, args, { detached: false, stdio: 'ignore' })
+  const child = spawn(launchExe, args, { detached: false, stdio: 'ignore' })
 
   if (!child.pid) {
     if (anonymizedUrl) {

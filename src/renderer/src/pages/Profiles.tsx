@@ -68,6 +68,12 @@ export default function Profiles(): JSX.Element {
     else toast.success(t('common.running'))
   }
 
+  const handleStopSelected = async (): Promise<void> => {
+    if (!selected.size) return
+    await window.mbm.profile.stopMany(Array.from(selected))
+    toast.success(t('profiles.stopSelectedDone'))
+  }
+
   const handleDeleteSelected = async (): Promise<void> => {
     if (!selected.size) return
     if (!confirm(t('profiles.deleteConfirm', { count: selected.size }))) return
@@ -102,6 +108,10 @@ export default function Profiles(): JSX.Element {
             <button onClick={handleLaunchSelected} className="btn-secondary">
               <Play className="h-4 w-4" />
               {t('profiles.launchSelected')}
+            </button>
+            <button onClick={handleStopSelected} className="btn-secondary">
+              <Square className="h-4 w-4" />
+              {t('profiles.stopSelected')}
             </button>
             <button onClick={handleDeleteSelected} className="btn-danger">
               <Trash2 className="h-4 w-4" />
