@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Plus, Shuffle } from 'lucide-react'
 import toast from 'react-hot-toast'
-import type { FingerprintConfig, ProfileRecord } from '@shared/types'
+import { DEFAULT_START_URL, type FingerprintConfig, type ProfileRecord } from '@shared/types'
 import { useAppStore } from '../store'
 import Modal from './Modal'
 import ProxyForm from './ProxyForm'
@@ -24,7 +24,7 @@ export default function ProfileForm({ initial, onDone }: Props): JSX.Element {
   const [groupName, setGroupName] = useState(initial?.groupName ?? '')
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [proxyId, setProxyId] = useState<string | ''>(initial?.proxyId ?? '')
-  const [startUrl, setStartUrl] = useState(initial?.startUrl ?? '')
+  const [startUrl, setStartUrl] = useState(initial?.startUrl ?? DEFAULT_START_URL)
   const [fp, setFp] = useState<FingerprintConfig | null>(initial?.fingerprint ?? null)
   const [busy, setBusy] = useState(false)
   const [proxyModalOpen, setProxyModalOpen] = useState(false)

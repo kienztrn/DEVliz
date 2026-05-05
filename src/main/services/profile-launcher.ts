@@ -2,7 +2,7 @@ import { spawn, ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
-import type { ProfileRecord, ProxyRecord } from '@shared/types'
+import { DEFAULT_START_URL, type ProfileRecord, type ProxyRecord } from '@shared/types'
 import { findChromium } from './chromium-finder'
 import { buildFingerprintExtension } from './extension-builder'
 import { getSettings } from '../repositories/settings-repo'
@@ -76,11 +76,7 @@ function buildArgs(
     args.push('--proxy-bypass-list=<-loopback>')
   }
 
-  if (profile.startUrl) {
-    args.push(profile.startUrl)
-  } else {
-    args.push('about:blank')
-  }
+  args.push(profile.startUrl || DEFAULT_START_URL)
 
   return args
 }

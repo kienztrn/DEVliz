@@ -1,3 +1,5 @@
+export const DEFAULT_START_URL = 'https://www.google.com/'
+
 export type ProxyType = 'http' | 'https' | 'socks5'
 
 export interface ProxyRecord {
