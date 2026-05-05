@@ -74,7 +74,13 @@ function buildArgs(
     `--disable-extensions-except=${extensionDir}`,
     '--no-first-run',
     '--no-default-browser-check',
-    '--disable-features=Translate,InterestFeedContentSuggestions,PrivacySandboxSettings4,OptimizationHints',
+    // DisableLoadExtensionCommandLineSwitch is enabled by default in Chrome
+    // 137+/138+ Stable (rolled out 2025-06). When enabled it silently strips
+    // the --load-extension flag, so our fingerprint/automation extension
+    // never gets loaded and chrome://extensions appears empty even though we
+    // passed --load-extension. Disabling the feature restores the previous
+    // behavior.
+    '--disable-features=Translate,InterestFeedContentSuggestions,PrivacySandboxSettings4,OptimizationHints,DisableLoadExtensionCommandLineSwitch',
     `--user-agent=${profile.fingerprint.userAgent}`,
     `--lang=${profile.fingerprint.locale}`,
     `--accept-lang=${profile.fingerprint.acceptLanguage}`,
