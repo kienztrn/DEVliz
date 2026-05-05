@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Layers } from 'lucide-react'
 import toast from 'react-hot-toast'
-import type { BulkCreateOptions } from '@shared/types'
+import { DEFAULT_START_URL, type BulkCreateOptions } from '@shared/types'
 import { LOCALES, TIMEZONES } from '@shared/fingerprint-pool'
 import { useAppStore } from '../store'
 
@@ -16,7 +16,7 @@ export default function BulkCreate(): JSX.Element {
   const [count, setCount] = useState(10)
   const [baseName, setBaseName] = useState('Profile')
   const [groupName, setGroupName] = useState('')
-  const [startUrl, setStartUrl] = useState('')
+  const [startUrl, setStartUrl] = useState(DEFAULT_START_URL)
   const [osMix, setOsMix] = useState<Array<'win' | 'mac' | 'linux'>>(['win'])
   const [localePool, setLocalePool] = useState<string[]>(['vi-VN', 'en-US'])
   const [timezonePool, setTimezonePool] = useState<string[]>(['Asia/Ho_Chi_Minh'])
