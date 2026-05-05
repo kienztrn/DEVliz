@@ -37,7 +37,8 @@ export default function Profiles(): JSX.Element {
 
   const handleLaunch = async (id: string): Promise<void> => {
     try {
-      await window.mbm.profile.launch(id)
+      const r = await window.mbm.profile.launch(id)
+      if (r.warning) toast(r.warning, { icon: '⚠️', duration: 8000 })
     } catch (e) {
       toast.error((e as Error).message)
     }
@@ -64,8 +65,10 @@ export default function Profiles(): JSX.Element {
     if (!selected.size) return
     const results = await window.mbm.profile.launchMany(Array.from(selected))
     const errors = results.filter((r) => r.error)
+    const warnings = results.filter((r) => r.warning)
     if (errors.length) toast.error(`${errors.length} failed`)
     else toast.success(t('common.running'))
+    if (warnings[0]?.warning) toast(warnings[0].warning, { icon: '⚠️', duration: 8000 })
   }
 
   const handleStopSelected = async (): Promise<void> => {

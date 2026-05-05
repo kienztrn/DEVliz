@@ -67,9 +67,11 @@ export interface BridgeApi {
     update(id: string, patch: Partial<ProfileRecord>): Promise<ProfileRecord>
     delete(id: string): Promise<void>
     clone(id: string, name?: string): Promise<ProfileRecord>
-    launch(id: string): Promise<{ pid: number }>
+    launch(id: string): Promise<{ pid: number; warning?: string }>
     stop(id: string): Promise<void>
-    launchMany(ids: string[]): Promise<Array<{ id: string; pid?: number; error?: string }>>
+    launchMany(
+      ids: string[],
+    ): Promise<Array<{ id: string; pid?: number; error?: string; warning?: string }>>
     stopMany(ids: string[]): Promise<void>
   }
   proxy: {

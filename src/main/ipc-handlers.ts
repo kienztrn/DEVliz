@@ -141,7 +141,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IpcChannels.ProfileLaunchMany, async (_e, ids: string[]) => {
-    const results: Array<{ id: string; pid?: number; error?: string }> = []
+    const results: Array<{ id: string; pid?: number; error?: string; warning?: string }> = []
     for (const id of ids) {
       try {
         const p = getProfile(id)
@@ -154,7 +154,7 @@ export function registerIpcHandlers(): void {
           continue
         }
         const r = await launchProfile(p)
-        results.push({ id, pid: r.pid })
+        results.push({ id, pid: r.pid, warning: r.warning })
         await new Promise((res) => setTimeout(res, 250))
       } catch (e) {
         results.push({ id, error: (e as Error).message })
