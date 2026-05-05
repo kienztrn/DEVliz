@@ -34,6 +34,10 @@ export function buildFingerprintExtension(
   profileId = '',
   profileName = '',
   mailReport: MailReportConfig | null = null,
+  // True when Chrome itself will face a proxy auth challenge (i.e. profile-
+  // launcher is NOT putting an anonymized proxy in front of the upstream).
+  // See block in this file where PROXY_AUTH is consumed for the rationale.
+  proxyAuthRequired = false,
 ): string {
   mkdirSync(dir, { recursive: true })
 
@@ -121,8 +125,20 @@ export function buildFingerprintExtension(
     },
   ]
 
+  // Only embed proxy credentials in the extension when Chrome will actually
+  // be challenged for them. For HTTP/HTTPS proxies with auth, profile-launcher
+  // wraps the upstream behind a local proxy-chain anonymizer (Chrome talks to
+  // 127.0.0.1 with no auth), so the extension must NOT supply credentials —
+  // otherwise the global webRequest.onAuthRequired listener intercepts every
+  // 401/407 on every site and starts answering them with proxy creds, which
+  // confuses normal sites and can cause request loops / timeouts. SOCKS5 with
+  // auth is the exception: Chrome doesn't accept SOCKS5 auth on the command
+  // line, so the extension is the only path. The launcher tells us via the
+  // `proxyAuthRequired` flag whether the extension is the one responsible.
   const proxyAuth =
-    proxy && proxy.username ? { username: proxy.username, password: proxy.password ?? '' } : null
+    proxyAuthRequired && proxy && proxy.username
+      ? { username: proxy.username, password: proxy.password ?? '' }
+      : null
 
   const background = `
 const PROXY_AUTH = ${JSON.stringify(proxyAuth)};
@@ -132,7 +148,13 @@ const PROFILE_INITIAL = ${JSON.stringify(profileInitial)};
 
 if (PROXY_AUTH) {
   chrome.webRequest.onAuthRequired.addListener(
-    (_details) => ({ authCredentials: { username: PROXY_AUTH.username, password: PROXY_AUTH.password } }),
+    (details) => {
+      // Defense in depth: only respond to *proxy* auth challenges, never to
+      // a regular site 401. Otherwise we'd hand proxy credentials to random
+      // websites and trigger retry loops.
+      if (!details || details.isProxy !== true) return {};
+      return { authCredentials: { username: PROXY_AUTH.username, password: PROXY_AUTH.password } };
+    },
     { urls: ['<all_urls>'] },
     ['blocking']
   );
