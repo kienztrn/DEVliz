@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { FingerprintConfig, ProxyRecord } from '@shared/types'
+import { colorForProfile } from './icon-builder'
 
 /**
  * Build a Chrome MV3 extension that:
@@ -14,27 +15,6 @@ import type { FingerprintConfig, ProxyRecord } from '@shared/types'
  *   AudioContext analyser (audio noise),
  *   RTCPeerConnection (WebRTC mode).
  */
-const PROFILE_PALETTE = [
-  '#1a73e8',
-  '#d93025',
-  '#188038',
-  '#9334e6',
-  '#0b8043',
-  '#1967d2',
-  '#a142f4',
-  '#e8710a',
-  '#137333',
-  '#7627bb',
-  '#c5221f',
-  '#0d652d',
-]
-
-function colorForProfile(seed: string): string {
-  let h = 0
-  for (let i = 0; i < seed.length; i++) h = (Math.imul(h, 31) + seed.charCodeAt(i)) | 0
-  return PROFILE_PALETTE[Math.abs(h) % PROFILE_PALETTE.length]
-}
-
 function initialFor(name: string): string {
   const trimmed = (name || '').trim()
   if (!trimmed) return 'P'

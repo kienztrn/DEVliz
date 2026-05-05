@@ -19,6 +19,7 @@ import { anonymizeProxy, closeAnonymizedProxy } from 'proxy-chain'
 import { DEFAULT_START_URL, type ProfileRecord, type ProxyRecord } from '@shared/types'
 import { findChromium } from './chromium-finder'
 import { buildFingerprintExtension } from './extension-builder'
+import { buildProfileIco, colorForProfile } from './icon-builder'
 import { getSettings } from '../repositories/settings-repo'
 import { getProxy } from '../repositories/proxy-repo'
 
@@ -105,13 +106,17 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;')
 }
 
-function generateWelcomePage(profileDir: string, profileName: string): string {
+function generateWelcomePage(profileDir: string, profileId: string, profileName: string): string {
   const safeName = escapeHtml(profileName || 'Profile')
+  const color = colorForProfile(profileId)
+  const faviconSvg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='2' y='2' width='60' height='60' rx='14' fill='${color}'/></svg>`
+  const faviconHref = `data:image/svg+xml;utf8,${encodeURIComponent(faviconSvg)}`
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <title>${safeName}</title>
+<link rel="icon" type="image/svg+xml" href="${faviconHref}" />
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; height: 100%; }
@@ -274,11 +279,22 @@ function describeError(e: unknown): string {
   return String(e)
 }
 
-function prepareLaunchExecutable(
+async function applyCustomIcon(exePath: string, icoPath: string): Promise<void> {
+  if (process.platform !== 'win32') return
+  try {
+    const mod = (await import('rcedit')) as { rcedit: (e: string, o: object) => Promise<void> }
+    await mod.rcedit(exePath, { icon: icoPath })
+    logLaunch(`rcedit set-icon ok exe=${exePath} ico=${icoPath}`)
+  } catch (e) {
+    logLaunch(`rcedit set-icon failed: ${describeError(e)}`)
+  }
+}
+
+async function prepareLaunchExecutable(
   profileId: string,
   profileDir: string,
   chromiumPath: string,
-): string {
+): Promise<string> {
   if (process.platform !== 'win32') return chromiumPath
 
   const srcAppDir = dirname(chromiumPath)
@@ -289,6 +305,7 @@ function prepareLaunchExecutable(
 
   const destAppDir = join(profileDir, 'chrome-app')
   const renamedExePath = join(destAppDir, renamedExe)
+  const icoPath = join(destAppDir, 'profile.ico')
 
   logLaunch(`prepare profile=${profileId} chromium=${chromiumPath} dest=${renamedExePath}`)
 
@@ -304,7 +321,23 @@ function prepareLaunchExecutable(
     }
   }
 
+  let icoChanged = false
+  try {
+    if (!existsSync(destAppDir)) mkdirSync(destAppDir, { recursive: true })
+    if (!existsSync(icoPath)) {
+      const color = colorForProfile(profileId)
+      writeFileSync(icoPath, buildProfileIco(color))
+      icoChanged = true
+      logLaunch(`generated ico ${icoPath} color=${color}`)
+    }
+  } catch (e) {
+    logLaunch(`ico generate failed: ${describeError(e)}`)
+  }
+
   if (existsSync(renamedExePath)) {
+    if (icoChanged) {
+      await applyCustomIcon(renamedExePath, icoPath)
+    }
     logLaunch(`reuse existing renamed exe ${renamedExePath}`)
     return renamedExePath
   }
@@ -319,15 +352,15 @@ function prepareLaunchExecutable(
   }
 
   try {
-    linkSync(chromiumPath, renamedExePath)
-    logLaunch(`hardlinked ${chromiumPath} -> ${renamedExePath}`)
-  } catch (linkErr) {
-    logLaunch(`linkSync chrome.exe failed: ${describeError(linkErr)}; trying copyFileSync`)
+    copyFileSync(chromiumPath, renamedExePath)
+    logLaunch(`copyFileSync chrome.exe -> ${renamedExePath} ok`)
+  } catch (copyErr) {
+    logLaunch(`copyFileSync chrome.exe failed: ${describeError(copyErr)}; trying linkSync`)
     try {
-      copyFileSync(chromiumPath, renamedExePath)
-      logLaunch(`copyFileSync ${renamedExePath} ok`)
-    } catch (copyErr) {
-      const msg = `unable to materialize ${renamedExe}: link=${describeError(linkErr)} copy=${describeError(copyErr)}`
+      linkSync(chromiumPath, renamedExePath)
+      logLaunch(`hardlinked (fallback) ${chromiumPath} -> ${renamedExePath}`)
+    } catch (linkErr) {
+      const msg = `unable to materialize ${renamedExe}: copy=${describeError(copyErr)} link=${describeError(linkErr)}`
       logLaunch(msg)
       lastLaunchWarning = msg
       return chromiumPath
@@ -346,6 +379,10 @@ function prepareLaunchExecutable(
     logLaunch(msg)
     lastLaunchWarning = msg
     return chromiumPath
+  }
+
+  if (existsSync(icoPath)) {
+    await applyCustomIcon(renamedExePath, icoPath)
   }
 
   return renamedExePath
@@ -402,12 +439,12 @@ export async function launchProfile(profile: ProfileRecord): Promise<LaunchResul
 
   const { server, anonymizedUrl } = await resolveProxyServer(proxy)
 
-  const launchExe = prepareLaunchExecutable(profile.id, profileDir, chromium)
+  const launchExe = await prepareLaunchExecutable(profile.id, profileDir, chromium)
   const warning = takeLastLaunchWarning() ?? undefined
 
   const isDefaultUrl = !profile.startUrl || profile.startUrl === DEFAULT_START_URL
   const startUrl: string = isDefaultUrl
-    ? generateWelcomePage(profileDir, profile.name)
+    ? generateWelcomePage(profileDir, profile.id, profile.name)
     : (profile.startUrl ?? DEFAULT_START_URL)
 
   const args = buildArgs(profile, userDataDir, extensionDir, server, startUrl)
