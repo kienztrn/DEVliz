@@ -20,6 +20,7 @@ import { findChromium } from './chromium-finder'
 import { buildFingerprintExtension } from './extension-builder'
 import { buildProfileIco, colorForProfile } from './icon-builder'
 import { applyWindowIdentity, aumidForProfile } from './window-identity'
+import { getMailServerInfo } from './mail-server'
 import { getSettings } from '../repositories/settings-repo'
 import { getProxy } from '../repositories/proxy-repo'
 
@@ -334,7 +335,17 @@ export async function launchProfile(profile: ProfileRecord): Promise<LaunchResul
   mkdirSync(userDataDir, { recursive: true })
 
   const proxy = profile.proxyId ? getProxy(profile.proxyId) : null
-  buildFingerprintExtension(extensionDir, profile.fingerprint, proxy, profile.id, profile.name)
+  const mailInfo = getMailServerInfo()
+  const mailReport =
+    mailInfo.port > 0 ? { port: mailInfo.port, token: mailInfo.tokenFor(profile.id) } : null
+  buildFingerprintExtension(
+    extensionDir,
+    profile.fingerprint,
+    proxy,
+    profile.id,
+    profile.name,
+    mailReport,
+  )
 
   const { server, anonymizedUrl } = await resolveProxyServer(proxy)
 
@@ -367,7 +378,9 @@ export async function launchProfile(profile: ProfileRecord): Promise<LaunchResul
     const icoPath = join(profileDir, 'chrome-app', 'profile.ico')
     if (existsSync(icoPath)) {
       applyWindowIdentity(child.pid, aumidForProfile(profile.id), icoPath)
-      logLaunch(`spawned window-identity helper pid=${child.pid} aumid=${aumidForProfile(profile.id)}`)
+      logLaunch(
+        `spawned window-identity helper pid=${child.pid} aumid=${aumidForProfile(profile.id)}`,
+      )
     }
   }
 

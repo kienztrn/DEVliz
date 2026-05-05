@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { electronApp, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc-handlers'
 import { getDb } from './db'
+import { startMailServer } from './services/mail-server'
 
 function attachDevShortcuts(window: BrowserWindow): void {
   const { webContents } = window
@@ -73,8 +74,11 @@ app.whenReady().then(() => {
     attachDevShortcuts(window)
   })
 
-  // Initialize DB and IPC
+  // Initialize DB, mail report server, and IPC
   getDb()
+  void startMailServer().catch(() => {
+    // best effort; mail badge feature will be disabled
+  })
   registerIpcHandlers()
 
   createWindow()

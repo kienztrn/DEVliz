@@ -72,6 +72,9 @@ const en = {
     randomize: 'Randomize',
     screen: 'Screen',
     webrtc: 'WebRTC',
+    gmail: 'Gmail',
+    gmailUnread: '{{count}} unread',
+    gmailNoData: 'No Gmail tab open',
   },
   bulk: {
     title: 'Bulk create profiles',
@@ -199,6 +202,9 @@ const vi = {
     randomize: 'Random',
     screen: 'Màn hình',
     webrtc: 'WebRTC',
+    gmail: 'Gmail',
+    gmailUnread: '{{count}} mail mới',
+    gmailNoData: 'Chưa mở tab Gmail',
   },
   bulk: {
     title: 'Tạo profile hàng loạt',

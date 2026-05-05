@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IpcChannels } from '@shared/ipc'
-import type { BridgeApi, ProfileCreateInput, ProxyCreateInput } from '@shared/ipc'
+import type { BridgeApi, MailStatusDto, ProfileCreateInput, ProxyCreateInput } from '@shared/ipc'
 import type {
   AppSettings,
   BulkCreateOptions,
@@ -48,6 +48,14 @@ const api: BridgeApi = {
         cb(id, running, pid)
       ipcRenderer.on(IpcChannels.RuntimeStatusEvent, handler)
       return () => ipcRenderer.removeListener(IpcChannels.RuntimeStatusEvent, handler)
+    },
+  },
+  mail: {
+    list: () => ipcRenderer.invoke(IpcChannels.MailList),
+    onUpdate: (cb) => {
+      const handler = (_e: unknown, status: MailStatusDto): void => cb(status)
+      ipcRenderer.on(IpcChannels.MailUpdateEvent, handler)
+      return () => ipcRenderer.removeListener(IpcChannels.MailUpdateEvent, handler)
     },
   },
 }
