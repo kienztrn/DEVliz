@@ -113,6 +113,10 @@ const en = {
     chromiumPathHelp: 'Leave empty to auto-detect.',
     profilesDir: 'Profiles data directory',
     profilesDirHelp: 'Where each profile’s user-data-dir lives.',
+    troubleshoot: 'Troubleshooting',
+    reloadUi: 'Reload UI',
+    reloadUiHelp:
+      'If the app stops responding, click here to reload the window. F12 also opens the developer console.',
   },
   errors: {
     nameRequired: 'Name is required',
@@ -234,6 +238,9 @@ const vi = {
     chromiumPathHelp: 'Để trống để tự động phát hiện.',
     profilesDir: 'Thư mục dữ liệu profile',
     profilesDirHelp: 'Nơi lưu user-data-dir của từng profile.',
+    troubleshoot: 'Khắc phục sự cố',
+    reloadUi: 'Tải lại giao diện',
+    reloadUiHelp: 'Nếu app bị treo, bấm vào đây để tải lại cửa sổ. Bấm F12 để mở DevTools xem lỗi.',
   },
   errors: {
     nameRequired: 'Tên là bắt buộc',

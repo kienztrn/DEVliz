@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { RotateCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import type { AppSettings } from '@shared/types'
 import { useAppStore } from '../store'
@@ -86,6 +87,17 @@ export default function SettingsPage(): JSX.Element {
         <div className="flex justify-end">
           <button onClick={save} className="btn-primary" disabled={busy}>
             {t('common.save')}
+          </button>
+        </div>
+      </div>
+
+      <div className="card p-5 space-y-3 max-w-2xl">
+        <h2 className="text-base font-semibold text-slate-900">{t('settings.troubleshoot')}</h2>
+        <p className="text-xs text-slate-500">{t('settings.reloadUiHelp')}</p>
+        <div>
+          <button type="button" onClick={() => window.location.reload()} className="btn-secondary">
+            <RotateCw className="h-4 w-4" />
+            {t('settings.reloadUi')}
           </button>
         </div>
       </div>

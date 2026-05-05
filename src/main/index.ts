@@ -1,8 +1,42 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { electronApp, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc-handlers'
 import { getDb } from './db'
+
+function attachDevShortcuts(window: BrowserWindow): void {
+  const { webContents } = window
+  webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return
+    const ctrlOrMeta = input.control || input.meta
+
+    if (input.code === 'F12') {
+      if (webContents.isDevToolsOpened()) webContents.closeDevTools()
+      else webContents.openDevTools({ mode: 'undocked' })
+      event.preventDefault()
+      return
+    }
+
+    if (ctrlOrMeta && input.shift && input.code === 'KeyI') {
+      if (webContents.isDevToolsOpened()) webContents.closeDevTools()
+      else webContents.openDevTools({ mode: 'undocked' })
+      event.preventDefault()
+      return
+    }
+
+    if (ctrlOrMeta && input.code === 'KeyR') {
+      webContents.reloadIgnoringCache()
+      event.preventDefault()
+      return
+    }
+
+    if (input.code === 'F5') {
+      webContents.reloadIgnoringCache()
+      event.preventDefault()
+      return
+    }
+  })
+}
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -36,7 +70,7 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.kienztrn.multibrowsermanager')
 
   app.on('browser-window-created', (_e, window) => {
-    optimizer.watchWindowShortcuts(window)
+    attachDevShortcuts(window)
   })
 
   // Initialize DB and IPC
