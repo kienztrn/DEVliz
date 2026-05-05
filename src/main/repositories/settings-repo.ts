@@ -23,12 +23,17 @@ export function getSettings(): AppSettings {
 }
 
 export function updateSettings(patch: Partial<AppSettings>): AppSettings {
-  const stmt = getDb().prepare(
+  const upsert = getDb().prepare(
     'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
   )
+  const remove = getDb().prepare('DELETE FROM settings WHERE key = ?')
   for (const [key, value] of Object.entries(patch)) {
-    if (value === undefined || value === null) continue
-    stmt.run(key, String(value))
+    if (value === undefined) continue
+    if (value === null || value === '') {
+      remove.run(key)
+    } else {
+      upsert.run(key, String(value))
+    }
   }
   return getSettings()
 }

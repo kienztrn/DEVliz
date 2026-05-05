@@ -102,7 +102,7 @@ if (PROXY_AUTH) {
     userAgent: fp.userAgent,
     platform: fp.platform,
     language,
-    languages: [language, baseLang === language ? 'en' : baseLang, 'en'],
+    languages: Array.from(new Set([language, baseLang, 'en'])),
     hardwareConcurrency: fp.hardwareConcurrency,
     deviceMemory: fp.deviceMemory,
     screen: fp.screen,
