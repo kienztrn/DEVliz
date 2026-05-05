@@ -13,7 +13,6 @@ import {
   type Dirent,
 } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { app } from 'electron'
 import { anonymizeProxy, closeAnonymizedProxy } from 'proxy-chain'
 import { DEFAULT_START_URL, type ProfileRecord, type ProxyRecord } from '@shared/types'
@@ -95,107 +94,6 @@ function buildArgs(
   args.push(startUrl)
 
   return args
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
-
-function generateWelcomePage(profileDir: string, profileId: string, profileName: string): string {
-  const safeName = escapeHtml(profileName || 'Profile')
-  const color = colorForProfile(profileId)
-  const faviconSvg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='2' y='2' width='60' height='60' rx='14' fill='${color}'/></svg>`
-  const faviconHref = `data:image/svg+xml;utf8,${encodeURIComponent(faviconSvg)}`
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<title>${safeName}</title>
-<link rel="icon" type="image/svg+xml" href="${faviconHref}" />
-<style>
-  *, *::before, *::after { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; height: 100%; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: linear-gradient(135deg, #f5f7fb 0%, #ffffff 60%, #eef2ff 100%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    color: #202124;
-  }
-  .name {
-    font-size: 56px;
-    font-weight: 700;
-    margin: 0 0 32px;
-    letter-spacing: -0.02em;
-    text-align: center;
-    word-break: break-word;
-    max-width: 800px;
-    padding: 0 16px;
-    background: linear-gradient(90deg, #1a73e8, #8e44ad);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-  form { width: 100%; max-width: 580px; padding: 0 16px; }
-  .search {
-    display: flex; align-items: center;
-    background: #fff;
-    border: 1px solid #dfe1e5;
-    border-radius: 24px;
-    padding: 8px 16px;
-    box-shadow: 0 1px 6px rgba(32,33,36,0.08);
-    transition: box-shadow .2s, border-color .2s;
-  }
-  .search:hover, .search:focus-within {
-    box-shadow: 0 1px 12px rgba(32,33,36,0.16);
-    border-color: rgba(223,225,229,0);
-  }
-  .search svg { flex-shrink: 0; margin-right: 12px; opacity: .6; }
-  input {
-    border: 0; outline: 0; font-size: 16px; flex: 1; padding: 10px 0;
-    background: transparent; color: #202124;
-  }
-  .links {
-    margin-top: 28px; display: flex; gap: 24px; font-size: 14px;
-    flex-wrap: wrap; justify-content: center; padding: 0 16px;
-  }
-  .links a { color: #5f6368; text-decoration: none; }
-  .links a:hover { color: #1a73e8; text-decoration: underline; }
-</style>
-</head>
-<body>
-  <h1 class="name">${safeName}</h1>
-  <form action="https://www.google.com/search" method="GET" autocomplete="off">
-    <div class="search">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-      <input type="text" name="q" autofocus placeholder="Search Google" />
-    </div>
-  </form>
-  <div class="links">
-    <a href="https://www.google.com">Google</a>
-    <a href="https://mail.google.com">Gmail</a>
-    <a href="https://www.youtube.com">YouTube</a>
-    <a href="https://maps.google.com">Maps</a>
-    <a href="https://translate.google.com">Translate</a>
-  </div>
-</body>
-</html>
-`
-  const filePath = join(profileDir, 'welcome.html')
-  try {
-    writeFileSync(filePath, html, 'utf8')
-    return pathToFileURL(filePath).href
-  } catch {
-    return DEFAULT_START_URL
-  }
 }
 
 function ensureHardlink(src: string, dest: string): void {
@@ -442,10 +340,7 @@ export async function launchProfile(profile: ProfileRecord): Promise<LaunchResul
   const launchExe = await prepareLaunchExecutable(profile.id, profileDir, chromium)
   const warning = takeLastLaunchWarning() ?? undefined
 
-  const isDefaultUrl = !profile.startUrl || profile.startUrl === DEFAULT_START_URL
-  const startUrl: string = isDefaultUrl
-    ? generateWelcomePage(profileDir, profile.id, profile.name)
-    : (profile.startUrl ?? DEFAULT_START_URL)
+  const startUrl: string = profile.startUrl || DEFAULT_START_URL
 
   const args = buildArgs(profile, userDataDir, extensionDir, server, startUrl)
   const child = spawn(launchExe, args, { detached: false, stdio: 'ignore' })
