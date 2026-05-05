@@ -71,6 +71,7 @@ export function buildFingerprintExtension(
         js: ['gmail-watcher.js'],
         run_at: 'document_idle',
         all_frames: false,
+        world: 'MAIN',
       },
     ],
     declarative_net_request: {
@@ -451,7 +452,15 @@ setupAction();
   const PROFILE_ID = ${JSON.stringify(profileId)};
   const REPORT_PORT = ${JSON.stringify(mailReport ? mailReport.port : 0)};
   const REPORT_TOKEN = ${JSON.stringify(mailReport ? mailReport.token : '')};
-  if (!REPORT_PORT || !REPORT_TOKEN || !PROFILE_ID) return;
+  const TAG = '[DEVliz]';
+  if (!REPORT_PORT || !REPORT_TOKEN || !PROFILE_ID) {
+    console.warn(TAG, 'gmail-watcher missing config — automation disabled', {
+      hasPort: !!REPORT_PORT,
+      hasToken: !!REPORT_TOKEN,
+      hasProfileId: !!PROFILE_ID,
+    });
+    return;
+  }
 
   const BASE = 'http://127.0.0.1:' + REPORT_PORT;
   const ID_ENC = encodeURIComponent(PROFILE_ID);
@@ -460,9 +469,14 @@ setupAction();
   const COMMAND_URL = BASE + '/api/command/' + ID_ENC + '/' + TOK_ENC;
   const PROGRESS_URL = BASE + '/api/automation-progress/' + ID_ENC + '/' + TOK_ENC;
 
+  console.log(TAG, 'gmail-watcher loaded for profile', PROFILE_ID, '— mail server', BASE);
+
   let lastReportedUnread = -1;
   let lastReportTs = 0;
   let automationRunning = false;
+  let commandPollCount = 0;
+  let commandPollOk = 0;
+  let commandPollFail = 0;
 
   function readEmail() {
     try {
@@ -697,17 +711,61 @@ setupAction();
   }
 
   async function pollCommands() {
+    commandPollCount++;
     try {
       const res = await fetch(COMMAND_URL, { credentials: 'omit', mode: 'cors' });
-      if (!res.ok) return;
+      if (!res.ok) {
+        commandPollFail++;
+        console.warn(TAG, 'pollCommands HTTP', res.status, COMMAND_URL);
+        return;
+      }
+      commandPollOk++;
       const data = await res.json().catch(() => null);
+      if (commandPollCount === 1) {
+        console.log(TAG, 'first command poll OK', { url: COMMAND_URL, data: data });
+      }
       if (!data || !data.command) return;
       const cmd = data.command;
+      console.log(TAG, 'command received', cmd);
       if (cmd.type === 'gmail-rotate-unread') {
         runGmailRotate(cmd.id, cmd.options);
+      } else {
+        console.warn(TAG, 'unknown command type', cmd.type);
       }
-    } catch (_) {}
+    } catch (e) {
+      commandPollFail++;
+      if (commandPollFail <= 3 || commandPollFail % 10 === 0) {
+        console.warn(TAG, 'pollCommands fetch failed', e && (e.message || e), 'url:', COMMAND_URL);
+      }
+    }
   }
+
+  // Expose a manual trigger for debugging from DevTools console.
+  // Usage: __devliz_runGmailRotate({ maxItems: 5 })
+  try {
+    Object.defineProperty(window, '__devliz_runGmailRotate', {
+      value: function (opts) {
+        console.log(TAG, 'manual trigger via __devliz_runGmailRotate', opts || {});
+        runGmailRotate('manual_' + Date.now(), opts || {});
+      },
+      writable: false,
+      configurable: true,
+    });
+    Object.defineProperty(window, '__devliz_status', {
+      value: function () {
+        return {
+          profileId: PROFILE_ID,
+          mailServer: BASE,
+          commandPollCount: commandPollCount,
+          commandPollOk: commandPollOk,
+          commandPollFail: commandPollFail,
+          automationRunning: automationRunning,
+        };
+      },
+      writable: false,
+      configurable: true,
+    });
+  } catch (_) {}
 
   setTimeout(pollCommands, 2500);
   setInterval(pollCommands, 5000);
