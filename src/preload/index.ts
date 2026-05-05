@@ -23,6 +23,7 @@ const api: BridgeApi = {
     launch: (id) => ipcRenderer.invoke(IpcChannels.ProfileLaunch, id),
     stop: (id) => ipcRenderer.invoke(IpcChannels.ProfileStop, id),
     launchMany: (ids) => ipcRenderer.invoke(IpcChannels.ProfileLaunchMany, ids),
+    stopMany: (ids) => ipcRenderer.invoke(IpcChannels.ProfileStopMany, ids),
   },
   proxy: {
     list: () => ipcRenderer.invoke(IpcChannels.ProxyList),

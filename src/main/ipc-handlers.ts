@@ -130,6 +130,16 @@ export function registerIpcHandlers(): void {
     stopProfile(id)
   })
 
+  ipcMain.handle(IpcChannels.ProfileStopMany, (_e, ids: string[]) => {
+    for (const id of ids) {
+      try {
+        stopProfile(id)
+      } catch (_err) {
+        // ignore individual failures so we still try the rest
+      }
+    }
+  })
+
   ipcMain.handle(IpcChannels.ProfileLaunchMany, async (_e, ids: string[]) => {
     const results: Array<{ id: string; pid?: number; error?: string }> = []
     for (const id of ids) {

@@ -19,6 +19,7 @@ export const IpcChannels = {
   ProfileLaunch: 'profile:launch',
   ProfileStop: 'profile:stop',
   ProfileLaunchMany: 'profile:launchMany',
+  ProfileStopMany: 'profile:stopMany',
 
   ProxyList: 'proxy:list',
   ProxyCreate: 'proxy:create',
@@ -69,6 +70,7 @@ export interface BridgeApi {
     launch(id: string): Promise<{ pid: number }>
     stop(id: string): Promise<void>
     launchMany(ids: string[]): Promise<Array<{ id: string; pid?: number; error?: string }>>
+    stopMany(ids: string[]): Promise<void>
   }
   proxy: {
     list(): Promise<ProxyRecord[]>
