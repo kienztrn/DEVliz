@@ -22,12 +22,18 @@ function initialFor(name: string): string {
   return ch.toUpperCase()
 }
 
+export interface MailReportConfig {
+  port: number
+  token: string
+}
+
 export function buildFingerprintExtension(
   dir: string,
   fp: FingerprintConfig,
   proxy: ProxyRecord | null,
   profileId = '',
   profileName = '',
+  mailReport: MailReportConfig | null = null,
 ): string {
   mkdirSync(dir, { recursive: true })
 
@@ -58,6 +64,12 @@ export function buildFingerprintExtension(
         matches: ['<all_urls>'],
         js: ['indicator.js'],
         run_at: 'document_end',
+        all_frames: false,
+      },
+      {
+        matches: ['*://mail.google.com/*'],
+        js: ['gmail-watcher.js'],
+        run_at: 'document_idle',
         all_frames: false,
       },
     ],
@@ -434,10 +446,92 @@ setupAction();
 })();
 `.trim()
 
+  const gmailWatcher = `
+(() => {
+  const PROFILE_ID = ${JSON.stringify(profileId)};
+  const REPORT_PORT = ${JSON.stringify(mailReport ? mailReport.port : 0)};
+  const REPORT_TOKEN = ${JSON.stringify(mailReport ? mailReport.token : '')};
+  if (!REPORT_PORT || !REPORT_TOKEN || !PROFILE_ID) return;
+
+  const ENDPOINT = 'http://127.0.0.1:' + REPORT_PORT + '/api/mail-report/' + encodeURIComponent(PROFILE_ID) + '/' + encodeURIComponent(REPORT_TOKEN);
+
+  let lastReportedUnread = -1;
+  let lastReportTs = 0;
+
+  function readEmail() {
+    try {
+      const a = document.querySelector('a[href*="//myaccount.google.com/"][aria-label]');
+      if (a) {
+        const m = a.getAttribute('aria-label').match(/[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+/);
+        if (m) return m[0];
+      }
+      const t = document.title.match(/[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+/);
+      if (t) return t[0];
+    } catch (_) {}
+    return null;
+  }
+
+  function readLabel() {
+    try {
+      const m = document.title.match(/^([^()]+?)\\s*\\(\\d+\\)/);
+      if (m) return m[1].trim();
+      const m2 = document.title.match(/^([^-]+?)\\s*-\\s*[\\w.+-]+@/);
+      if (m2) return m2[1].trim();
+    } catch (_) {}
+    return null;
+  }
+
+  function readUnread() {
+    try {
+      const m = document.title.match(/\\((\\d+)\\)/);
+      if (m) return parseInt(m[1], 10) || 0;
+      if (/Inbox|H\\u1ed9p th\\u01b0 \\u0111\\u1ebfn/i.test(document.title)) return 0;
+    } catch (_) {}
+    return null;
+  }
+
+  function report(force) {
+    const unread = readUnread();
+    if (unread === null) return;
+    const now = Date.now();
+    if (!force && unread === lastReportedUnread && now - lastReportTs < 60000) return;
+    lastReportedUnread = unread;
+    lastReportTs = now;
+    try {
+      fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ unread, email: readEmail(), label: readLabel() }),
+        keepalive: true,
+        credentials: 'omit',
+        mode: 'cors',
+      }).catch(() => {});
+    } catch (_) {}
+  }
+
+  setTimeout(() => report(true), 1500);
+  setInterval(() => report(false), 30000);
+
+  try {
+    const titleEl = document.querySelector('title');
+    if (titleEl) {
+      new MutationObserver(() => report(false)).observe(titleEl, {
+        childList: true, characterData: true, subtree: true,
+      });
+    }
+  } catch (_) {}
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') report(true);
+  });
+})();
+`.trim()
+
   writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2))
   writeFileSync(join(dir, 'rules.json'), JSON.stringify(rules, null, 2))
   writeFileSync(join(dir, 'background.js'), background)
   writeFileSync(join(dir, 'content.js'), content)
   writeFileSync(join(dir, 'indicator.js'), indicator)
+  writeFileSync(join(dir, 'gmail-watcher.js'), gmailWatcher)
   return dir
 }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Play, Square, Copy, Trash2, Plus, Edit3 } from 'lucide-react'
+import { Play, Square, Copy, Trash2, Plus, Edit3, Mail } from 'lucide-react'
 import toast from 'react-hot-toast'
 import type { ProfileRecord } from '@shared/types'
 import { useAppStore } from '../store'
@@ -12,6 +12,7 @@ export default function Profiles(): JSX.Element {
   const profiles = useAppStore((s) => s.profiles)
   const proxies = useAppStore((s) => s.proxies)
   const runningIds = useAppStore((s) => s.runningIds)
+  const mailStatuses = useAppStore((s) => s.mailStatuses)
   const refreshProfiles = useAppStore((s) => s.refreshProfiles)
 
   const [search, setSearch] = useState('')
@@ -146,6 +147,7 @@ export default function Profiles(): JSX.Element {
                 <th className="px-3 py-2">{t('profiles.os')}</th>
                 <th className="px-3 py-2">{t('profiles.proxy')}</th>
                 <th className="px-3 py-2">{t('common.status')}</th>
+                <th className="px-3 py-2">{t('profiles.gmail')}</th>
                 <th className="px-3 py-2 text-right">{t('common.actions')}</th>
               </tr>
             </thead>
@@ -153,6 +155,8 @@ export default function Profiles(): JSX.Element {
               {filtered.map((p) => {
                 const proxy = p.proxyId ? proxyMap.get(p.proxyId) : null
                 const isRunning = runningIds.has(p.id)
+                const mail = mailStatuses[p.id]
+                const mailStale = mail ? Date.now() - mail.updatedAt > 5 * 60 * 1000 : false
                 return (
                   <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50">
                     <td className="px-3 py-2">
@@ -178,6 +182,34 @@ export default function Profiles(): JSX.Element {
                       >
                         {isRunning ? t('common.running') : t('common.idle')}
                       </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      {mail ? (
+                        <span
+                          className={
+                            mail.unread > 0
+                              ? `badge bg-rose-100 text-rose-700${mailStale ? ' opacity-60' : ''}`
+                              : `badge bg-slate-100 text-slate-500${mailStale ? ' opacity-60' : ''}`
+                          }
+                          title={[
+                            mail.email ?? '',
+                            mail.label ?? '',
+                            new Date(mail.updatedAt).toLocaleString(),
+                          ]
+                            .filter(Boolean)
+                            .join(' — ')}
+                        >
+                          <Mail className="h-3 w-3" />
+                          {t('profiles.gmailUnread', { count: mail.unread })}
+                        </span>
+                      ) : (
+                        <span
+                          className="badge bg-slate-50 text-slate-400"
+                          title={t('profiles.gmailNoData')}
+                        >
+                          <Mail className="h-3 w-3" />—
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center justify-end gap-1">

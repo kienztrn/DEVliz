@@ -35,6 +35,9 @@ export const IpcChannels = {
 
   RuntimeStatus: 'runtime:status',
   RuntimeStatusEvent: 'runtime:statusEvent',
+
+  MailList: 'mail:list',
+  MailUpdateEvent: 'mail:updateEvent',
 } as const
 
 export type IpcChannelName = (typeof IpcChannels)[keyof typeof IpcChannels]
@@ -93,4 +96,16 @@ export interface BridgeApi {
     status(): Promise<Record<string, { running: boolean; pid?: number }>>
     onStatusEvent(cb: (id: string, running: boolean, pid?: number) => void): () => void
   }
+  mail: {
+    list(): Promise<Record<string, MailStatusDto>>
+    onUpdate(cb: (status: MailStatusDto) => void): () => void
+  }
+}
+
+export interface MailStatusDto {
+  profileId: string
+  unread: number
+  email: string | null
+  label: string | null
+  updatedAt: number
 }

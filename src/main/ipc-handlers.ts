@@ -34,6 +34,7 @@ import {
 } from './services/profile-launcher'
 import { testProxy } from './services/proxy-tester'
 import { importProxiesFromText } from './services/proxy-importer'
+import { getAllMailStatuses, onMailUpdate } from './services/mail-server'
 
 function broadcast(channel: string, ...args: unknown[]): void {
   for (const w of BrowserWindow.getAllWindows()) {
@@ -49,6 +50,10 @@ export function registerIpcHandlers(): void {
       setProfileStatus(id, 'idle')
     }
     broadcast(IpcChannels.RuntimeStatusEvent, id, running, pid)
+  })
+
+  onMailUpdate((status) => {
+    broadcast(IpcChannels.MailUpdateEvent, status)
   })
 
   ipcMain.handle(IpcChannels.ProfileList, () => listProfiles())
@@ -196,6 +201,8 @@ export function registerIpcHandlers(): void {
   )
 
   ipcMain.handle(IpcChannels.RuntimeStatus, () => getRunningStatus())
+
+  ipcMain.handle(IpcChannels.MailList, () => getAllMailStatuses())
 }
 
 function mergeFingerprint(partial: ProfileCreateInput['fingerprint']): FingerprintConfig {
