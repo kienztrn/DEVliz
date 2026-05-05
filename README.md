@@ -26,7 +26,7 @@ Built and maintained by [@kienztrn](https://github.com/kienztrn).
   - `user:pass@host:port`
 
 ### Browser launcher
-Each profile launches a separate Chromium-family browser (Chrome / Edge / Brave / Chromium) on the host with:
+Each profile launches a separate Chromium-family browser on the host. The launcher auto-detects browsers in this priority order: **Brave → Vivaldi → ungoogled-chromium → Edge → Opera → Yandex → Chrome** (Chrome last so privacy-focused forks win when present). You can override the binary path in **Settings → Browser binary**. The Settings page shows which browser was detected and at what path. Each profile launches the chosen browser with:
 - Dedicated `--user-data-dir` so cookies, local storage, history are fully isolated
 - `--proxy-server=` flag for the assigned proxy
 - Internal MV3 extension for proxy authentication and fingerprint spoofing

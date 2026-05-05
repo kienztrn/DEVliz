@@ -41,6 +41,8 @@ export const IpcChannels = {
 
   AutomationGmailRun: 'automation:gmailRun',
   AutomationProgressEvent: 'automation:progressEvent',
+
+  SystemDetectBrowser: 'system:detectBrowser',
 } as const
 
 export type IpcChannelName = (typeof IpcChannels)[keyof typeof IpcChannels]
@@ -107,6 +109,15 @@ export interface BridgeApi {
     gmailRun(profileIds: string[], options?: GmailRotateOptionsDto): Promise<GmailRunResultDto[]>
     onProgress(cb: (progress: AutomationProgressDto) => void): () => void
   }
+  system: {
+    detectBrowser(explicitPath?: string | null): Promise<DetectedBrowserDto>
+  }
+}
+
+export interface DetectedBrowserDto {
+  path: string | null
+  brand: string | null
+  source: 'explicit' | 'auto' | 'none'
 }
 
 export interface MailStatusDto {

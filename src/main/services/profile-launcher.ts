@@ -337,7 +337,7 @@ export async function launchProfile(
   const chromium = findChromium(settings.chromiumPath)
   if (!chromium) {
     throw new Error(
-      'No Chromium-based browser found. Install Google Chrome / Edge / Brave / Chromium, or set the path in Settings.',
+      'No Chromium-based browser found. Install Brave / Vivaldi / ungoogled-chromium / Edge / Chrome, or set the path in Settings.',
     )
   }
 
