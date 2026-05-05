@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
+import { anonymizeProxy, closeAnonymizedProxy } from 'proxy-chain'
 import { DEFAULT_START_URL, type ProfileRecord, type ProxyRecord } from '@shared/types'
 import { findChromium } from './chromium-finder'
 import { buildFingerprintExtension } from './extension-builder'
@@ -13,6 +14,7 @@ interface RunningProfile {
   child: ChildProcess
   pid: number
   extensionDir: string
+  anonymizedProxyUrl: string | null
 }
 
 const running = new Map<string, RunningProfile>()
@@ -48,7 +50,7 @@ function buildArgs(
   profile: ProfileRecord,
   userDataDir: string,
   extensionDir: string,
-  proxy: ProxyRecord | null,
+  proxyServer: string | null,
 ): string[] {
   const args: string[] = [
     `--user-data-dir=${userDataDir}`,
@@ -70,15 +72,35 @@ function buildArgs(
     args.push('--force-webrtc-ip-handling-policy=disable_non_proxied_udp')
   }
 
-  if (proxy) {
-    const scheme = proxy.type === 'socks5' ? 'socks5' : proxy.type === 'https' ? 'https' : 'http'
-    args.push(`--proxy-server=${scheme}://${proxy.host}:${proxy.port}`)
+  if (proxyServer) {
+    args.push(`--proxy-server=${proxyServer}`)
     args.push('--proxy-bypass-list=<-loopback>')
   }
 
   args.push(profile.startUrl || DEFAULT_START_URL)
 
   return args
+}
+
+async function resolveProxyServer(
+  proxy: ProxyRecord | null,
+): Promise<{ server: string | null; anonymizedUrl: string | null }> {
+  if (!proxy) return { server: null, anonymizedUrl: null }
+
+  const scheme = proxy.type === 'socks5' ? 'socks5' : proxy.type === 'https' ? 'https' : 'http'
+
+  if (proxy.type === 'socks5') {
+    return { server: `${scheme}://${proxy.host}:${proxy.port}`, anonymizedUrl: null }
+  }
+
+  if (proxy.username) {
+    const auth = `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password ?? '')}`
+    const upstream = `${scheme}://${auth}@${proxy.host}:${proxy.port}`
+    const localUrl = await anonymizeProxy(upstream)
+    return { server: localUrl, anonymizedUrl: localUrl }
+  }
+
+  return { server: `${scheme}://${proxy.host}:${proxy.port}`, anonymizedUrl: null }
 }
 
 export interface LaunchResult {
@@ -107,14 +129,25 @@ export async function launchProfile(profile: ProfileRecord): Promise<LaunchResul
   const proxy = profile.proxyId ? getProxy(profile.proxyId) : null
   buildFingerprintExtension(extensionDir, profile.fingerprint, proxy)
 
-  const args = buildArgs(profile, userDataDir, extensionDir, proxy)
+  const { server, anonymizedUrl } = await resolveProxyServer(proxy)
+
+  const args = buildArgs(profile, userDataDir, extensionDir, server)
   const child = spawn(chromium, args, { detached: false, stdio: 'ignore' })
 
   if (!child.pid) {
+    if (anonymizedUrl) {
+      void closeAnonymizedProxy(anonymizedUrl, true).catch(() => {})
+    }
     throw new Error('Failed to launch browser process')
   }
 
-  const info: RunningProfile = { id: profile.id, child, pid: child.pid, extensionDir }
+  const info: RunningProfile = {
+    id: profile.id,
+    child,
+    pid: child.pid,
+    extensionDir,
+    anonymizedProxyUrl: anonymizedUrl,
+  }
   running.set(profile.id, info)
   emitStatus(profile.id, true, child.pid)
 
@@ -122,6 +155,9 @@ export async function launchProfile(profile: ProfileRecord): Promise<LaunchResul
     if (running.get(profile.id)?.child === child) {
       running.delete(profile.id)
       emitStatus(profile.id, false)
+    }
+    if (anonymizedUrl) {
+      void closeAnonymizedProxy(anonymizedUrl, true).catch(() => {})
     }
   })
 
@@ -135,6 +171,9 @@ export function stopProfile(id: string): void {
     info.child.kill()
   } catch (_e) {
     // ignore
+  }
+  if (info.anonymizedProxyUrl) {
+    void closeAnonymizedProxy(info.anonymizedProxyUrl, true).catch(() => {})
   }
   running.delete(id)
   emitStatus(id, false)
