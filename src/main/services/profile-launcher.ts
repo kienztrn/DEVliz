@@ -1,5 +1,6 @@
 import { spawn, ChildProcess } from 'node:child_process'
 import {
+  appendFileSync,
   copyFileSync,
   existsSync,
   linkSync,
@@ -145,23 +146,31 @@ function shortId(id: string): string {
   return id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || 'profile'
 }
 
-function canHardlinkAcross(src: string, destDir: string): boolean {
-  const probeName = `.devliz-link-probe-${process.pid}`
-  const probe = join(destDir, probeName)
+function logFile(): string {
+  return join(app.getPath('userData'), 'launch-debug.log')
+}
+
+function logLaunch(line: string): void {
   try {
-    mkdirSync(destDir, { recursive: true })
-    if (existsSync(probe)) rmSync(probe, { force: true })
-    linkSync(src, probe)
-    rmSync(probe, { force: true })
-    return true
+    appendFileSync(logFile(), `[${new Date().toISOString()}] ${line}\n`)
   } catch {
-    try {
-      rmSync(probe, { force: true })
-    } catch {
-      // ignore
-    }
-    return false
+    // best effort
   }
+}
+
+let lastLaunchWarning: string | null = null
+export function takeLastLaunchWarning(): string | null {
+  const w = lastLaunchWarning
+  lastLaunchWarning = null
+  return w
+}
+
+function describeError(e: unknown): string {
+  if (e && typeof e === 'object') {
+    const err = e as { code?: string; message?: string; errno?: number; syscall?: string }
+    return `${err.code ?? ''} ${err.syscall ?? ''} ${err.message ?? String(e)}`.trim()
+  }
+  return String(e)
 }
 
 function prepareLaunchExecutable(
@@ -171,39 +180,74 @@ function prepareLaunchExecutable(
 ): string {
   if (process.platform !== 'win32') return chromiumPath
 
-  try {
-    const srcAppDir = dirname(chromiumPath)
-    const exeBase = basename(chromiumPath)
-    const ext = exeBase.toLowerCase().endsWith('.exe') ? '.exe' : ''
-    const exeStem = ext ? exeBase.slice(0, -ext.length) : exeBase
-    const renamedExe = `${exeStem}-${shortId(profileId)}${ext}`
+  const srcAppDir = dirname(chromiumPath)
+  const exeBase = basename(chromiumPath)
+  const ext = exeBase.toLowerCase().endsWith('.exe') ? '.exe' : ''
+  const exeStem = ext ? exeBase.slice(0, -ext.length) : exeBase
+  const renamedExe = `${exeStem}-${shortId(profileId)}${ext}`
 
-    const destAppDir = join(profileDir, 'chrome-app')
-    const renamedExePath = join(destAppDir, renamedExe)
+  const destAppDir = join(profileDir, 'chrome-app')
+  const renamedExePath = join(destAppDir, renamedExe)
 
-    if (existsSync(destAppDir)) {
-      try {
-        if (lstatSync(destAppDir).isSymbolicLink()) {
-          rmSync(destAppDir, { recursive: true, force: true })
-        }
-      } catch {
-        // ignore
+  logLaunch(`prepare profile=${profileId} chromium=${chromiumPath} dest=${renamedExePath}`)
+
+  if (existsSync(destAppDir)) {
+    try {
+      const st = lstatSync(destAppDir)
+      if (st.isSymbolicLink()) {
+        logLaunch(`removing old junction at ${destAppDir}`)
+        rmSync(destAppDir, { recursive: true, force: true })
       }
+    } catch (e) {
+      logLaunch(`lstat ${destAppDir} failed: ${describeError(e)}`)
     }
+  }
 
-    if (existsSync(renamedExePath)) return renamedExePath
+  if (existsSync(renamedExePath)) {
+    logLaunch(`reuse existing renamed exe ${renamedExePath}`)
+    return renamedExePath
+  }
 
-    if (!canHardlinkAcross(chromiumPath, destAppDir)) {
-      return chromiumPath
-    }
-
-    mirrorChromeAppDir(srcAppDir, destAppDir, [exeBase, renamedExe])
-
-    if (existsSync(renamedExePath)) return renamedExePath
-    return chromiumPath
-  } catch {
+  try {
+    mkdirSync(destAppDir, { recursive: true })
+  } catch (e) {
+    const msg = `mkdir ${destAppDir} failed: ${describeError(e)}`
+    logLaunch(msg)
+    lastLaunchWarning = msg
     return chromiumPath
   }
+
+  try {
+    linkSync(chromiumPath, renamedExePath)
+    logLaunch(`hardlinked ${chromiumPath} -> ${renamedExePath}`)
+  } catch (linkErr) {
+    logLaunch(`linkSync chrome.exe failed: ${describeError(linkErr)}; trying copyFileSync`)
+    try {
+      copyFileSync(chromiumPath, renamedExePath)
+      logLaunch(`copyFileSync ${renamedExePath} ok`)
+    } catch (copyErr) {
+      const msg = `unable to materialize ${renamedExe}: link=${describeError(linkErr)} copy=${describeError(copyErr)}`
+      logLaunch(msg)
+      lastLaunchWarning = msg
+      return chromiumPath
+    }
+  }
+
+  try {
+    mirrorChromeAppDir(srcAppDir, destAppDir, [exeBase, renamedExe])
+    logLaunch(`mirror complete for ${destAppDir}`)
+  } catch (e) {
+    logLaunch(`mirror error (continuing): ${describeError(e)}`)
+  }
+
+  if (!existsSync(renamedExePath)) {
+    const msg = `renamed exe missing after mirror: ${renamedExePath}`
+    logLaunch(msg)
+    lastLaunchWarning = msg
+    return chromiumPath
+  }
+
+  return renamedExePath
 }
 
 async function resolveProxyServer(
@@ -229,6 +273,7 @@ async function resolveProxyServer(
 
 export interface LaunchResult {
   pid: number
+  warning?: string
 }
 
 export async function launchProfile(profile: ProfileRecord): Promise<LaunchResult> {
@@ -257,6 +302,7 @@ export async function launchProfile(profile: ProfileRecord): Promise<LaunchResul
   const { server, anonymizedUrl } = await resolveProxyServer(proxy)
 
   const launchExe = prepareLaunchExecutable(profile.id, profileDir, chromium)
+  const warning = takeLastLaunchWarning() ?? undefined
   const args = buildArgs(profile, userDataDir, extensionDir, server)
   const child = spawn(launchExe, args, { detached: false, stdio: 'ignore' })
 
@@ -287,7 +333,7 @@ export async function launchProfile(profile: ProfileRecord): Promise<LaunchResul
     }
   })
 
-  return { pid: child.pid }
+  return warning ? { pid: child.pid, warning } : { pid: child.pid }
 }
 
 export function stopProfile(id: string): void {
