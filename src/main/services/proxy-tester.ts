@@ -12,8 +12,7 @@ interface IpApiResponse {
 
 export async function testProxy(proxy: ProxyRecord): Promise<ProxyTestResult> {
   const startedAt = Date.now()
-  const proxyScheme =
-    proxy.type === 'socks5' ? 'socks5' : proxy.type === 'https' ? 'https' : 'http'
+  const proxyScheme = proxy.type === 'socks5' ? 'socks5' : proxy.type === 'https' ? 'https' : 'http'
   const proxyUrl = `${proxyScheme}://${proxy.host}:${proxy.port}`
 
   const partition = `proxy-test-${proxy.id}-${Date.now()}`
