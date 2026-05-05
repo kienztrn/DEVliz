@@ -351,6 +351,17 @@ export async function launchProfile(
   const mailInfo = getMailServerInfo()
   const mailReport =
     mailInfo.port > 0 ? { port: mailInfo.port, token: mailInfo.tokenFor(profile.id) } : null
+
+  const { server, anonymizedUrl } = await resolveProxyServer(proxy)
+
+  // Chrome only sees a real upstream proxy auth challenge when we did NOT
+  // wrap the upstream behind a proxy-chain anonymizer. Today that means:
+  // SOCKS5 with username (we don't anonymize SOCKS5 at all). For HTTP/HTTPS
+  // with auth we always anonymize, so Chrome talks to 127.0.0.1 and never
+  // gets a 407 — we must NOT load the extension's auth handler in that case
+  // because it would also fire on regular site 401s and break browsing.
+  const proxyAuthRequired = !!proxy && !!proxy.username && !anonymizedUrl
+
   buildFingerprintExtension(
     extensionDir,
     profile.fingerprint,
@@ -358,9 +369,8 @@ export async function launchProfile(
     profile.id,
     profile.name,
     mailReport,
+    proxyAuthRequired,
   )
-
-  const { server, anonymizedUrl } = await resolveProxyServer(proxy)
 
   const launchExe = await prepareLaunchExecutable(profile.id, profileDir, chromium)
   const warning = takeLastLaunchWarning() ?? undefined
