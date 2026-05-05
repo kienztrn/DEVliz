@@ -71,7 +71,10 @@ export function buildFingerprintExtension(
         js: ['gmail-watcher.js'],
         run_at: 'document_idle',
         all_frames: false,
-        world: 'MAIN',
+        // ISOLATED world (default): bypasses Gmail's page CSP so we can
+        // fetch http://127.0.0.1:<port>/api/command/... from the local
+        // mail-server. MAIN world inherits the page's connect-src and
+        // Gmail blocks localhost there.
       },
     ],
     declarative_net_request: {
@@ -740,32 +743,33 @@ setupAction();
     }
   }
 
-  // Expose a manual trigger for debugging from DevTools console.
-  // Usage: __devliz_runGmailRotate({ maxItems: 5 })
-  try {
-    Object.defineProperty(window, '__devliz_runGmailRotate', {
-      value: function (opts) {
-        console.log(TAG, 'manual trigger via __devliz_runGmailRotate', opts || {});
-        runGmailRotate('manual_' + Date.now(), opts || {});
-      },
-      writable: false,
-      configurable: true,
-    });
-    Object.defineProperty(window, '__devliz_status', {
-      value: function () {
-        return {
-          profileId: PROFILE_ID,
-          mailServer: BASE,
-          commandPollCount: commandPollCount,
-          commandPollOk: commandPollOk,
-          commandPollFail: commandPollFail,
-          automationRunning: automationRunning,
-        };
-      },
-      writable: false,
-      configurable: true,
-    });
-  } catch (_) {}
+  // Bridge to DevTools console (which lives in the page's MAIN world).
+  // Content script lives in ISOLATED world so window globals are not
+  // accessible from DevTools — instead we listen for postMessage events
+  // that DevTools / page can dispatch. Usage from DevTools console:
+  //   window.postMessage({ type: 'devliz:run', opts: { maxItems: 5 } }, '*')
+  //   window.postMessage({ type: 'devliz:status' }, '*')
+  // Result is logged back via the same window.postMessage channel.
+  window.addEventListener('message', function (event) {
+    if (event.source !== window) return;
+    const data = event.data;
+    if (!data || typeof data !== 'object') return;
+    if (data.type === 'devliz:run') {
+      console.log(TAG, 'manual trigger via postMessage', data.opts || {});
+      runGmailRotate('manual_' + Date.now(), data.opts || {});
+    } else if (data.type === 'devliz:status') {
+      const status = {
+        profileId: PROFILE_ID,
+        mailServer: BASE,
+        commandPollCount: commandPollCount,
+        commandPollOk: commandPollOk,
+        commandPollFail: commandPollFail,
+        automationRunning: automationRunning,
+      };
+      console.log(TAG, 'status', status);
+      window.postMessage({ type: 'devliz:status:reply', status: status }, '*');
+    }
+  });
 
   setTimeout(pollCommands, 2500);
   setInterval(pollCommands, 5000);
