@@ -1,5 +1,14 @@
 import { spawn, ChildProcess } from 'node:child_process'
-import { existsSync, mkdirSync, rmSync, symlinkSync, lstatSync } from 'node:fs'
+import {
+  copyFileSync,
+  existsSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { app } from 'electron'
 import { anonymizeProxy, closeAnonymizedProxy } from 'proxy-chain'
@@ -82,29 +91,115 @@ function buildArgs(
   return args
 }
 
-function prepareLaunchExecutable(profileDir: string, chromiumPath: string): string {
-  if (process.platform !== 'win32') return chromiumPath
-
+function ensureHardlink(src: string, dest: string): void {
   try {
-    const chromeAppDir = dirname(chromiumPath)
-    const linkDir = join(profileDir, 'chrome-app')
-    const linkExe = join(linkDir, basename(chromiumPath))
-
-    if (existsSync(linkExe)) {
+    if (existsSync(dest)) {
       try {
-        if (lstatSync(linkDir).isSymbolicLink() || lstatSync(linkDir).isDirectory()) {
-          return linkExe
-        }
+        const s = statSync(src)
+        const d = statSync(dest)
+        if (s.ino && s.ino === d.ino && s.dev === d.dev) return
       } catch {
         // fall through and recreate
       }
+      try {
+        rmSync(dest, { force: true })
+      } catch {
+        return
+      }
+    }
+    try {
+      linkSync(src, dest)
+    } catch {
+      try {
+        copyFileSync(src, dest)
+      } catch {
+        // ignore — Chrome may still find resources via parent path
+      }
+    }
+  } catch {
+    // ignore individual file failures
+  }
+}
+
+function mirrorChromeAppDir(srcDir: string, destDir: string, renameAtRoot: [string, string]): void {
+  mkdirSync(destDir, { recursive: true })
+  let entries: ReturnType<typeof readdirSync>
+  try {
+    entries = readdirSync(srcDir, { withFileTypes: true })
+  } catch {
+    return
+  }
+  for (const entry of entries) {
+    const srcPath = join(srcDir, entry.name)
+    const targetName = entry.name === renameAtRoot[0] ? renameAtRoot[1] : entry.name
+    const destPath = join(destDir, targetName)
+    if (entry.isDirectory()) {
+      mirrorChromeAppDir(srcPath, destPath, ['', ''])
+    } else if (entry.isFile()) {
+      ensureHardlink(srcPath, destPath)
+    }
+  }
+}
+
+function shortId(id: string): string {
+  return id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || 'profile'
+}
+
+function canHardlinkAcross(src: string, destDir: string): boolean {
+  const probeName = `.devliz-link-probe-${process.pid}`
+  const probe = join(destDir, probeName)
+  try {
+    mkdirSync(destDir, { recursive: true })
+    if (existsSync(probe)) rmSync(probe, { force: true })
+    linkSync(src, probe)
+    rmSync(probe, { force: true })
+    return true
+  } catch {
+    try {
+      rmSync(probe, { force: true })
+    } catch {
+      // ignore
+    }
+    return false
+  }
+}
+
+function prepareLaunchExecutable(
+  profileId: string,
+  profileDir: string,
+  chromiumPath: string,
+): string {
+  if (process.platform !== 'win32') return chromiumPath
+
+  try {
+    const srcAppDir = dirname(chromiumPath)
+    const exeBase = basename(chromiumPath)
+    const ext = exeBase.toLowerCase().endsWith('.exe') ? '.exe' : ''
+    const exeStem = ext ? exeBase.slice(0, -ext.length) : exeBase
+    const renamedExe = `${exeStem}-${shortId(profileId)}${ext}`
+
+    const destAppDir = join(profileDir, 'chrome-app')
+    const renamedExePath = join(destAppDir, renamedExe)
+
+    if (existsSync(destAppDir)) {
+      try {
+        if (lstatSync(destAppDir).isSymbolicLink()) {
+          rmSync(destAppDir, { recursive: true, force: true })
+        }
+      } catch {
+        // ignore
+      }
     }
 
-    if (existsSync(linkDir)) {
-      rmSync(linkDir, { recursive: true, force: true })
+    if (existsSync(renamedExePath)) return renamedExePath
+
+    if (!canHardlinkAcross(chromiumPath, destAppDir)) {
+      return chromiumPath
     }
-    symlinkSync(chromeAppDir, linkDir, 'junction')
-    if (existsSync(linkExe)) return linkExe
+
+    mirrorChromeAppDir(srcAppDir, destAppDir, [exeBase, renamedExe])
+
+    if (existsSync(renamedExePath)) return renamedExePath
     return chromiumPath
   } catch {
     return chromiumPath
@@ -161,7 +256,7 @@ export async function launchProfile(profile: ProfileRecord): Promise<LaunchResul
 
   const { server, anonymizedUrl } = await resolveProxyServer(proxy)
 
-  const launchExe = prepareLaunchExecutable(profileDir, chromium)
+  const launchExe = prepareLaunchExecutable(profile.id, profileDir, chromium)
   const args = buildArgs(profile, userDataDir, extensionDir, server)
   const child = spawn(launchExe, args, { detached: false, stdio: 'ignore' })
 
