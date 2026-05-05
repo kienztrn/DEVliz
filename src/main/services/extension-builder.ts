@@ -14,18 +14,55 @@ import type { FingerprintConfig, ProxyRecord } from '@shared/types'
  *   AudioContext analyser (audio noise),
  *   RTCPeerConnection (WebRTC mode).
  */
+const PROFILE_PALETTE = [
+  '#1a73e8',
+  '#d93025',
+  '#188038',
+  '#9334e6',
+  '#0b8043',
+  '#1967d2',
+  '#a142f4',
+  '#e8710a',
+  '#137333',
+  '#7627bb',
+  '#c5221f',
+  '#0d652d',
+]
+
+function colorForProfile(seed: string): string {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (Math.imul(h, 31) + seed.charCodeAt(i)) | 0
+  return PROFILE_PALETTE[Math.abs(h) % PROFILE_PALETTE.length]
+}
+
+function initialFor(name: string): string {
+  const trimmed = (name || '').trim()
+  if (!trimmed) return 'P'
+  const ch = trimmed[0]
+  return ch.toUpperCase()
+}
+
 export function buildFingerprintExtension(
   dir: string,
   fp: FingerprintConfig,
   proxy: ProxyRecord | null,
+  profileId = '',
+  profileName = '',
 ): string {
   mkdirSync(dir, { recursive: true })
 
+  const profileColor = colorForProfile(profileId || profileName || 'profile')
+  const profileInitial = initialFor(profileName)
+  const displayName = profileName || 'Profile'
+
   const manifest = {
     manifest_version: 3,
-    name: 'MBM Fingerprint Bridge',
+    name: `MBM \u2014 ${displayName}`,
     version: '1.0.0',
-    description: 'Internal fingerprint and proxy auth handler for Multi Browser Manager.',
+    description: `Profile indicator + fingerprint/proxy bridge for "${displayName}".`,
+    action: {
+      default_title: displayName,
+    },
     permissions: ['webRequest', 'webRequestAuthProvider', 'declarativeNetRequest', 'scripting'],
     host_permissions: ['<all_urls>'],
     background: { service_worker: 'background.js' },
@@ -36,6 +73,12 @@ export function buildFingerprintExtension(
         run_at: 'document_start',
         all_frames: true,
         world: 'MAIN',
+      },
+      {
+        matches: ['<all_urls>'],
+        js: ['indicator.js'],
+        run_at: 'document_end',
+        all_frames: false,
       },
     ],
     declarative_net_request: {
@@ -87,6 +130,10 @@ export function buildFingerprintExtension(
 
   const background = `
 const PROXY_AUTH = ${JSON.stringify(proxyAuth)};
+const PROFILE_NAME = ${JSON.stringify(displayName)};
+const PROFILE_COLOR = ${JSON.stringify(profileColor)};
+const PROFILE_INITIAL = ${JSON.stringify(profileInitial)};
+
 if (PROXY_AUTH) {
   chrome.webRequest.onAuthRequired.addListener(
     (_details) => ({ authCredentials: { username: PROXY_AUTH.username, password: PROXY_AUTH.password } }),
@@ -94,6 +141,154 @@ if (PROXY_AUTH) {
     ['blocking']
   );
 }
+
+async function setupAction() {
+  try {
+    const sizes = [16, 32, 48, 128];
+    const imageData = {};
+    for (const size of sizes) {
+      const canvas = new OffscreenCanvas(size, size);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) continue;
+      const r = Math.max(2, size / 4);
+      ctx.fillStyle = PROFILE_COLOR;
+      ctx.beginPath();
+      ctx.moveTo(r, 0);
+      ctx.lineTo(size - r, 0);
+      ctx.quadraticCurveTo(size, 0, size, r);
+      ctx.lineTo(size, size - r);
+      ctx.quadraticCurveTo(size, size, size - r, size);
+      ctx.lineTo(r, size);
+      ctx.quadraticCurveTo(0, size, 0, size - r);
+      ctx.lineTo(0, r);
+      ctx.quadraticCurveTo(0, 0, r, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold ' + Math.floor(size * 0.6) + 'px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(PROFILE_INITIAL, size / 2, size / 2 + size * 0.04);
+      imageData[size] = ctx.getImageData(0, 0, size, size);
+    }
+    await chrome.action.setIcon({ imageData });
+    await chrome.action.setTitle({ title: PROFILE_NAME });
+    await chrome.action.setBadgeBackgroundColor({ color: PROFILE_COLOR });
+    await chrome.action.setBadgeText({ text: PROFILE_INITIAL });
+  } catch (e) {
+    // ignore
+  }
+}
+
+chrome.runtime.onStartup.addListener(setupAction);
+chrome.runtime.onInstalled.addListener(setupAction);
+setupAction();
+`.trim()
+
+  const indicator = `
+(() => {
+  const NAME = ${JSON.stringify(displayName)};
+  const COLOR = ${JSON.stringify(profileColor)};
+  const HIDE_KEY = '__mbm_indicator_hidden_session__';
+  const CHIP_ID = '__mbm_chip__';
+  const prefix = '[' + NAME + '] ';
+
+  function applyTitlePrefix() {
+    try {
+      const t = document.title || '';
+      if (!t.startsWith(prefix)) document.title = prefix + t;
+    } catch (_) {}
+  }
+
+  function watchTitle() {
+    try {
+      const titleEl = document.querySelector('title');
+      if (titleEl) {
+        new MutationObserver(applyTitlePrefix).observe(titleEl, {
+          childList: true, characterData: true, subtree: true,
+        });
+      }
+      const head = document.head || document.documentElement;
+      if (head) {
+        new MutationObserver((muts) => {
+          for (const m of muts) {
+            for (const n of m.addedNodes) {
+              if (n && n.nodeName === 'TITLE') {
+                applyTitlePrefix();
+                new MutationObserver(applyTitlePrefix).observe(n, {
+                  childList: true, characterData: true, subtree: true,
+                });
+              }
+            }
+          }
+        }).observe(head, { childList: true });
+      }
+    } catch (_) {}
+  }
+
+  function injectChip() {
+    try {
+      if (sessionStorage.getItem(HIDE_KEY) === '1') return;
+      if (!document.body) return;
+      if (document.getElementById(CHIP_ID)) return;
+      const chip = document.createElement('div');
+      chip.id = CHIP_ID;
+      chip.style.cssText = [
+        'all: initial',
+        'position: fixed',
+        'top: 12px',
+        'right: 12px',
+        'z-index: 2147483647',
+        'background: ' + COLOR,
+        'color: #fff',
+        'padding: 6px 8px 6px 10px',
+        'border-radius: 9999px',
+        'font: 600 12px/1 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif',
+        'box-shadow: 0 2px 8px rgba(0,0,0,0.18)',
+        'user-select: none',
+        'display: flex',
+        'align-items: center',
+        'gap: 6px',
+        'max-width: 240px',
+        'pointer-events: auto',
+        'cursor: default',
+      ].join(';');
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      icon.setAttribute('width', '14'); icon.setAttribute('height', '14');
+      icon.setAttribute('viewBox', '0 0 24 24'); icon.setAttribute('fill', 'rgba(255,255,255,0.95)');
+      icon.style.flexShrink = '0';
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z');
+      icon.appendChild(path);
+      const label = document.createElement('span');
+      label.textContent = NAME;
+      label.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff;font:inherit';
+      const close = document.createElement('span');
+      close.textContent = '\u00d7';
+      close.title = 'Hide for this tab';
+      close.style.cssText = 'cursor:pointer;opacity:0.8;font-size:16px;line-height:1;padding:0 2px 0 4px;color:#fff';
+      close.addEventListener('click', () => {
+        try { sessionStorage.setItem(HIDE_KEY, '1'); } catch (_) {}
+        chip.remove();
+      });
+      chip.appendChild(icon);
+      chip.appendChild(label);
+      chip.appendChild(close);
+      document.body.appendChild(chip);
+    } catch (_) {}
+  }
+
+  applyTitlePrefix();
+  watchTitle();
+  injectChip();
+
+  try {
+    new MutationObserver(() => {
+      applyTitlePrefix();
+      injectChip();
+    }).observe(document.documentElement || document, { childList: true, subtree: false });
+  } catch (_) {}
+})();
 `.trim()
 
   const content = `
@@ -263,5 +458,6 @@ if (PROXY_AUTH) {
   writeFileSync(join(dir, 'rules.json'), JSON.stringify(rules, null, 2))
   writeFileSync(join(dir, 'background.js'), background)
   writeFileSync(join(dir, 'content.js'), content)
+  writeFileSync(join(dir, 'indicator.js'), indicator)
   return dir
 }
