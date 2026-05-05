@@ -398,7 +398,7 @@ export async function launchProfile(profile: ProfileRecord): Promise<LaunchResul
   mkdirSync(userDataDir, { recursive: true })
 
   const proxy = profile.proxyId ? getProxy(profile.proxyId) : null
-  buildFingerprintExtension(extensionDir, profile.fingerprint, proxy)
+  buildFingerprintExtension(extensionDir, profile.fingerprint, proxy, profile.id, profile.name)
 
   const { server, anonymizedUrl } = await resolveProxyServer(proxy)
 
