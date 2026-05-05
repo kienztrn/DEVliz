@@ -16,7 +16,10 @@ export async function testProxy(proxy: ProxyRecord): Promise<ProxyTestResult> {
     proxy.type === 'socks5' ? 'socks5' : proxy.type === 'https' ? 'https' : 'http'
   const proxyUrl = `${proxyScheme}://${proxy.host}:${proxy.port}`
 
-  const partition = `proxy-test-${proxy.id}-${Date.now()}`
+  // Stable partition per proxy id so Electron does not allocate a brand-new
+  // Session object on every test. setProxy() simply overwrites the previous
+  // proxy config on the same session.
+  const partition = `proxy-test-${proxy.id}`
   const sess = electronSession.fromPartition(partition, { cache: false })
 
   try {
@@ -30,6 +33,14 @@ export async function testProxy(proxy: ProxyRecord): Promise<ProxyTestResult> {
     const finish = (result: ProxyTestResult): void => {
       if (settled) return
       settled = true
+      // Drop any persistent connections + cookies/cache between tests so the
+      // session does not retain state from previous proxy configurations.
+      try {
+        sess.closeAllConnections()
+      } catch (_e) {
+        // noop
+      }
+      void sess.clearStorageData().catch(() => undefined)
       resolve(result)
     }
 
