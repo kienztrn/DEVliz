@@ -19,6 +19,7 @@ import { DEFAULT_START_URL, type ProfileRecord, type ProxyRecord } from '@shared
 import { findChromium } from './chromium-finder'
 import { buildFingerprintExtension } from './extension-builder'
 import { buildProfileIco, colorForProfile } from './icon-builder'
+import { applyWindowIdentity, aumidForProfile } from './window-identity'
 import { getSettings } from '../repositories/settings-repo'
 import { getProxy } from '../repositories/proxy-repo'
 
@@ -361,6 +362,14 @@ export async function launchProfile(profile: ProfileRecord): Promise<LaunchResul
   }
   running.set(profile.id, info)
   emitStatus(profile.id, true, child.pid)
+
+  if (process.platform === 'win32') {
+    const icoPath = join(profileDir, 'chrome-app', 'profile.ico')
+    if (existsSync(icoPath)) {
+      applyWindowIdentity(child.pid, aumidForProfile(profile.id), icoPath)
+      logLaunch(`spawned window-identity helper pid=${child.pid} aumid=${aumidForProfile(profile.id)}`)
+    }
+  }
 
   child.on('exit', () => {
     if (running.get(profile.id)?.child === child) {
