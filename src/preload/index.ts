@@ -1,6 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IpcChannels } from '@shared/ipc'
-import type { BridgeApi, MailStatusDto, ProfileCreateInput, ProxyCreateInput } from '@shared/ipc'
+import type {
+  AutomationProgressDto,
+  BridgeApi,
+  GmailRotateOptionsDto,
+  MailStatusDto,
+  ProfileCreateInput,
+  ProxyCreateInput,
+} from '@shared/ipc'
 import type {
   AppSettings,
   BulkCreateOptions,
@@ -56,6 +63,15 @@ const api: BridgeApi = {
       const handler = (_e: unknown, status: MailStatusDto): void => cb(status)
       ipcRenderer.on(IpcChannels.MailUpdateEvent, handler)
       return () => ipcRenderer.removeListener(IpcChannels.MailUpdateEvent, handler)
+    },
+  },
+  automation: {
+    gmailRun: (ids: string[], options?: GmailRotateOptionsDto) =>
+      ipcRenderer.invoke(IpcChannels.AutomationGmailRun, ids, options),
+    onProgress: (cb) => {
+      const handler = (_e: unknown, progress: AutomationProgressDto): void => cb(progress)
+      ipcRenderer.on(IpcChannels.AutomationProgressEvent, handler)
+      return () => ipcRenderer.removeListener(IpcChannels.AutomationProgressEvent, handler)
     },
   },
 }

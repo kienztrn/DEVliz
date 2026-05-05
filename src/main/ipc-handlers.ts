@@ -1,5 +1,12 @@
 import { BrowserWindow, ipcMain } from 'electron'
-import { IpcChannels, type ProfileCreateInput, type ProxyCreateInput } from '@shared/ipc'
+import {
+  IpcChannels,
+  type AutomationProgressDto,
+  type GmailRotateOptionsDto,
+  type GmailRunResultDto,
+  type ProfileCreateInput,
+  type ProxyCreateInput,
+} from '@shared/ipc'
 import type {
   AppSettings,
   BulkCreateOptions,
@@ -34,7 +41,8 @@ import {
 } from './services/profile-launcher'
 import { testProxy } from './services/proxy-tester'
 import { importProxiesFromText } from './services/proxy-importer'
-import { getAllMailStatuses, onMailUpdate } from './services/mail-server'
+import { getAllMailStatuses, onAutomationProgress, onMailUpdate } from './services/mail-server'
+import { runGmailRotateForProfile } from './services/automation'
 
 function broadcast(channel: string, ...args: unknown[]): void {
   for (const w of BrowserWindow.getAllWindows()) {
@@ -54,6 +62,20 @@ export function registerIpcHandlers(): void {
 
   onMailUpdate((status) => {
     broadcast(IpcChannels.MailUpdateEvent, status)
+  })
+
+  onAutomationProgress((progress) => {
+    const dto: AutomationProgressDto = {
+      profileId: progress.profileId,
+      commandId: progress.commandId,
+      phase: progress.phase,
+      index: progress.index,
+      total: progress.total,
+      subject: progress.subject,
+      message: progress.message,
+      ts: progress.ts,
+    }
+    broadcast(IpcChannels.AutomationProgressEvent, dto)
   })
 
   ipcMain.handle(IpcChannels.ProfileList, () => listProfiles())
@@ -203,6 +225,52 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IpcChannels.RuntimeStatus, () => getRunningStatus())
 
   ipcMain.handle(IpcChannels.MailList, () => getAllMailStatuses())
+
+  ipcMain.handle(
+    IpcChannels.AutomationGmailRun,
+    async (_e, ids: string[], options?: GmailRotateOptionsDto): Promise<GmailRunResultDto[]> => {
+      const out: GmailRunResultDto[] = []
+      for (const id of ids) {
+        const profile = getProfile(id)
+        if (!profile) {
+          out.push({
+            profileId: id,
+            commandId: '',
+            launched: false,
+            error: 'Profile not found',
+          })
+          continue
+        }
+        broadcast(IpcChannels.AutomationProgressEvent, {
+          profileId: id,
+          commandId: '',
+          phase: 'queued',
+          ts: Date.now(),
+        } satisfies AutomationProgressDto)
+        const result = await runGmailRotateForProfile(profile, options ?? {})
+        if (result.launched) {
+          broadcast(IpcChannels.AutomationProgressEvent, {
+            profileId: id,
+            commandId: result.commandId,
+            phase: 'launched',
+            message: 'Started Chrome with Gmail',
+            ts: Date.now(),
+          } satisfies AutomationProgressDto)
+        } else if (result.error) {
+          broadcast(IpcChannels.AutomationProgressEvent, {
+            profileId: id,
+            commandId: result.commandId,
+            phase: 'launch-failed',
+            message: result.error,
+            ts: Date.now(),
+          } satisfies AutomationProgressDto)
+        }
+        out.push(result)
+        await new Promise((res) => setTimeout(res, 250))
+      }
+      return out
+    },
+  )
 }
 
 function mergeFingerprint(partial: ProfileCreateInput['fingerprint']): FingerprintConfig {

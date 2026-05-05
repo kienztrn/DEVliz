@@ -453,10 +453,16 @@ setupAction();
   const REPORT_TOKEN = ${JSON.stringify(mailReport ? mailReport.token : '')};
   if (!REPORT_PORT || !REPORT_TOKEN || !PROFILE_ID) return;
 
-  const ENDPOINT = 'http://127.0.0.1:' + REPORT_PORT + '/api/mail-report/' + encodeURIComponent(PROFILE_ID) + '/' + encodeURIComponent(REPORT_TOKEN);
+  const BASE = 'http://127.0.0.1:' + REPORT_PORT;
+  const ID_ENC = encodeURIComponent(PROFILE_ID);
+  const TOK_ENC = encodeURIComponent(REPORT_TOKEN);
+  const REPORT_URL = BASE + '/api/mail-report/' + ID_ENC + '/' + TOK_ENC;
+  const COMMAND_URL = BASE + '/api/command/' + ID_ENC + '/' + TOK_ENC;
+  const PROGRESS_URL = BASE + '/api/automation-progress/' + ID_ENC + '/' + TOK_ENC;
 
   let lastReportedUnread = -1;
   let lastReportTs = 0;
+  let automationRunning = false;
 
   function readEmail() {
     try {
@@ -498,7 +504,7 @@ setupAction();
     lastReportedUnread = unread;
     lastReportTs = now;
     try {
-      fetch(ENDPOINT, {
+      fetch(REPORT_URL, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ unread, email: readEmail(), label: readLabel() }),
@@ -524,6 +530,187 @@ setupAction();
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') report(true);
   });
+
+  // ---------- Automation command polling + inbox rotation ----------
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+  function rand(min, max) { return Math.floor(min + Math.random() * (max - min + 1)); }
+
+  function postProgress(commandId, phase, extra) {
+    extra = extra || {};
+    const body = Object.assign({ commandId: commandId, phase: phase }, extra);
+    try {
+      fetch(PROGRESS_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'omit',
+        mode: 'cors',
+        keepalive: true,
+      }).catch(() => {});
+    } catch (_) {}
+  }
+
+  function dismissPopups() {
+    let dismissed = 0;
+    const dismissTexts = [
+      'got it',
+      'no thanks',
+      'skip',
+      'maybe later',
+      'cancel',
+      'close',
+      'b\\u1ecf qua',
+      '\\u0111\\u1ec3 sau',
+      '\\u0111\\u1eebng h\\u1ecfi l\\u1ea1i',
+      '\\u0111\\u00e3 hi\\u1ec3u',
+      'kh\\u00f4ng, c\\u1ea3m \\u01a1n',
+    ];
+    try {
+      const buttons = document.querySelectorAll('button, [role="button"]');
+      buttons.forEach(function (btn) {
+        const txt = (btn.textContent || '').trim().toLowerCase();
+        const aria = (btn.getAttribute('aria-label') || '').trim().toLowerCase();
+        const target = txt || aria;
+        if (!target) return;
+        for (let i = 0; i < dismissTexts.length; i++) {
+          if (target.indexOf(dismissTexts[i]) !== -1) {
+            try { btn.click(); dismissed++; } catch (_) {}
+            break;
+          }
+        }
+      });
+    } catch (_) {}
+    return dismissed;
+  }
+
+  function findUnreadRow() {
+    const r = document.querySelector('tr.zE');
+    if (r) return r;
+    const labeled = document.querySelector('tr.zA[aria-labelledby] [aria-label$="unread"]');
+    if (labeled) {
+      const row = labeled.closest ? labeled.closest('tr.zA') : null;
+      if (row) return row;
+    }
+    return null;
+  }
+
+  function rowSubject(row) {
+    if (!row) return '';
+    try {
+      const subjEl = row.querySelector('[role="link"] span, .y6 span, .bog span, .bog');
+      if (subjEl) return (subjEl.textContent || '').trim().slice(0, 200);
+      return (row.textContent || '').trim().slice(0, 100);
+    } catch (_) { return ''; }
+  }
+
+  async function navigateBackToInbox() {
+    try {
+      const back = document.querySelector('[aria-label="Back to Inbox"], [aria-label*="quay l\\u1ea1i"], [data-tooltip*="Back to Inbox"]');
+      if (back) { back.click(); return; }
+    } catch (_) {}
+    try { history.back(); } catch (_) {}
+    if (location.hash && location.hash.indexOf('#inbox') !== 0) {
+      try { location.hash = '#inbox'; } catch (_) {}
+    }
+  }
+
+  async function waitForInbox(timeoutMs) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (location.hash.indexOf('#inbox') === 0 && document.querySelector('table[role="grid"], table.F.cf.zt')) {
+        return true;
+      }
+      await sleep(300);
+    }
+    return false;
+  }
+
+  async function runGmailRotate(commandId, options) {
+    if (automationRunning) {
+      postProgress(commandId, 'error', { message: 'already running' });
+      return;
+    }
+    automationRunning = true;
+
+    const opts = options || {};
+    const maxItems = Math.max(1, Math.min(200, opts.maxItems || 50));
+    const minOpenMs = Math.max(500, opts.minOpenMs || 2000);
+    const maxOpenMs = Math.max(minOpenMs, opts.maxOpenMs || 3000);
+    const minReadMs = Math.max(500, opts.minReadMs || 5000);
+    const maxReadMs = Math.max(minReadMs, opts.maxReadMs || 7000);
+
+    try {
+      postProgress(commandId, 'started', { total: maxItems });
+
+      // Make sure we are on the inbox
+      if (location.hash && location.hash.indexOf('#inbox') !== 0) {
+        try { location.hash = '#inbox'; } catch (_) {}
+        await sleep(1500);
+      }
+
+      // Initial dismiss + a brief wait for UI
+      const dismissed = dismissPopups();
+      if (dismissed > 0) postProgress(commandId, 'dismiss-popup', { message: dismissed + ' popup(s) dismissed' });
+      await sleep(1500);
+
+      let processed = 0;
+      for (let i = 0; i < maxItems; i++) {
+        // Refresh popup dismissal each iteration in case Google shows a new one
+        dismissPopups();
+
+        const row = findUnreadRow();
+        if (!row) {
+          postProgress(commandId, 'no-unread', { index: processed, total: processed });
+          break;
+        }
+        const subject = rowSubject(row);
+        postProgress(commandId, 'opening', { index: processed + 1, total: maxItems, subject: subject });
+
+        try {
+          row.click();
+        } catch (_) {
+          postProgress(commandId, 'error', { index: processed + 1, message: 'click failed' });
+          await sleep(500);
+          continue;
+        }
+
+        await sleep(rand(minOpenMs, maxOpenMs));
+        try { window.scrollBy({ top: 400 + Math.floor(Math.random() * 300), behavior: 'smooth' }); } catch (_) {}
+        postProgress(commandId, 'reading', { index: processed + 1, total: maxItems, subject: subject });
+        await sleep(rand(minReadMs, maxReadMs));
+
+        await navigateBackToInbox();
+        await waitForInbox(5000);
+        await sleep(800);
+
+        processed++;
+        postProgress(commandId, 'done-item', { index: processed, total: maxItems, subject: subject });
+      }
+
+      postProgress(commandId, 'finished', { total: processed });
+    } catch (e) {
+      postProgress(commandId, 'error', { message: (e && e.message) || String(e) });
+    } finally {
+      automationRunning = false;
+    }
+  }
+
+  async function pollCommands() {
+    try {
+      const res = await fetch(COMMAND_URL, { credentials: 'omit', mode: 'cors' });
+      if (!res.ok) return;
+      const data = await res.json().catch(() => null);
+      if (!data || !data.command) return;
+      const cmd = data.command;
+      if (cmd.type === 'gmail-rotate-unread') {
+        runGmailRotate(cmd.id, cmd.options);
+      }
+    } catch (_) {}
+  }
+
+  setTimeout(pollCommands, 2500);
+  setInterval(pollCommands, 5000);
 })();
 `.trim()
 

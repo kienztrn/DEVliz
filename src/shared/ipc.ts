@@ -38,6 +38,9 @@ export const IpcChannels = {
 
   MailList: 'mail:list',
   MailUpdateEvent: 'mail:updateEvent',
+
+  AutomationGmailRun: 'automation:gmailRun',
+  AutomationProgressEvent: 'automation:progressEvent',
 } as const
 
 export type IpcChannelName = (typeof IpcChannels)[keyof typeof IpcChannels]
@@ -100,6 +103,10 @@ export interface BridgeApi {
     list(): Promise<Record<string, MailStatusDto>>
     onUpdate(cb: (status: MailStatusDto) => void): () => void
   }
+  automation: {
+    gmailRun(profileIds: string[], options?: GmailRotateOptionsDto): Promise<GmailRunResultDto[]>
+    onProgress(cb: (progress: AutomationProgressDto) => void): () => void
+  }
 }
 
 export interface MailStatusDto {
@@ -108,4 +115,44 @@ export interface MailStatusDto {
   email: string | null
   label: string | null
   updatedAt: number
+}
+
+export interface GmailRotateOptionsDto {
+  maxItems?: number
+  minOpenMs?: number
+  maxOpenMs?: number
+  minReadMs?: number
+  maxReadMs?: number
+}
+
+export interface GmailRunResultDto {
+  profileId: string
+  commandId: string
+  launched: boolean
+  pid?: number
+  error?: string
+  warning?: string
+}
+
+export interface AutomationProgressDto {
+  profileId: string
+  commandId: string
+  phase:
+    | 'started'
+    | 'opening'
+    | 'reading'
+    | 'done-item'
+    | 'finished'
+    | 'no-unread'
+    | 'error'
+    | 'dismiss-popup'
+    | 'queued'
+    | 'launching'
+    | 'launched'
+    | 'launch-failed'
+  index?: number
+  total?: number
+  subject?: string
+  message?: string
+  ts: number
 }

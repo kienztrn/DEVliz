@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { LayoutDashboard, Users, Globe, Layers, Settings } from 'lucide-react'
+import { LayoutDashboard, Users, Globe, Layers, Settings, Zap } from 'lucide-react'
 import { cn } from '../lib/cn'
 
 const navItems = [
@@ -8,6 +8,7 @@ const navItems = [
   { to: '/profiles', key: 'profiles', icon: Users },
   { to: '/bulk', key: 'bulk', icon: Layers },
   { to: '/proxies', key: 'proxies', icon: Globe },
+  { to: '/automation', key: 'automation', icon: Zap },
   { to: '/settings', key: 'settings', icon: Settings },
 ] as const
 

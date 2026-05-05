@@ -50,6 +50,12 @@ The internal extension patches:
 - i18n: **Vietnamese + English**, switchable in Settings
 - Toast notifications
 
+### Automation
+- ✅ **Automation page** with "Run automation" button + confirm modal ("Bạn muốn chạy chứ?")
+- ✅ **Gmail rotate-unread** workflow per profile: opens `mail.google.com`, dismisses popups, clicks each unread email, scrolls, waits 5–7s, then returns to inbox, on a 2–3s/5–7s human-like cadence
+- Profiles that are not running are launched directly with `mail.google.com`. Profiles already running need a Gmail tab open (the in-extension content script polls a localhost command queue every 5s).
+- Live log shows `queued → launched → started → opening → reading → done-item → finished` events.
+
 ### Storage
 Local SQLite (`better-sqlite3`) at `userData/mbm.db`:
 - `profiles` — profile records with serialized fingerprint JSON
