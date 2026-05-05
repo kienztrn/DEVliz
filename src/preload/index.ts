@@ -74,6 +74,10 @@ const api: BridgeApi = {
       return () => ipcRenderer.removeListener(IpcChannels.AutomationProgressEvent, handler)
     },
   },
+  system: {
+    detectBrowser: (explicitPath?: string | null) =>
+      ipcRenderer.invoke(IpcChannels.SystemDetectBrowser, explicitPath ?? null),
+  },
 }
 
 contextBridge.exposeInMainWorld('mbm', api)

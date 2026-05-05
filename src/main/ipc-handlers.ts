@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain } from 'electron'
 import {
   IpcChannels,
   type AutomationProgressDto,
+  type DetectedBrowserDto,
   type GmailRotateOptionsDto,
   type GmailRunResultDto,
   type ProfileCreateInput,
@@ -43,6 +44,7 @@ import { testProxy } from './services/proxy-tester'
 import { importProxiesFromText } from './services/proxy-importer'
 import { getAllMailStatuses, onAutomationProgress, onMailUpdate } from './services/mail-server'
 import { runGmailRotateForProfile } from './services/automation'
+import { describeDetectedBrowser } from './services/chromium-finder'
 
 function broadcast(channel: string, ...args: unknown[]): void {
   for (const w of BrowserWindow.getAllWindows()) {
@@ -220,6 +222,14 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IpcChannels.SettingsGet, () => getSettings())
   ipcMain.handle(IpcChannels.SettingsUpdate, (_e, patch: Partial<AppSettings>) =>
     updateSettings(patch),
+  )
+
+  ipcMain.handle(
+    IpcChannels.SystemDetectBrowser,
+    (_e, explicitPath?: string | null): DetectedBrowserDto => {
+      const path = explicitPath ?? getSettings().chromiumPath ?? null
+      return describeDetectedBrowser(path)
+    },
   )
 
   ipcMain.handle(IpcChannels.RuntimeStatus, () => getRunningStatus())

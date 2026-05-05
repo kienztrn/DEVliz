@@ -115,8 +115,14 @@ const en = {
     title: 'Settings',
     language: 'Language',
     theme: 'Theme',
-    chromiumPath: 'Chromium / Chrome / Edge / Brave path',
-    chromiumPathHelp: 'Leave empty to auto-detect.',
+    chromiumPath: 'Browser binary (Brave / Vivaldi / ungoogled-chromium / Edge / Chrome)',
+    chromiumPathHelp:
+      'Leave empty to auto-detect. Priority: Brave → Vivaldi → ungoogled-chromium → Edge → Opera → Yandex → Chrome.',
+    detectedBrowser: {
+      explicit: 'Using your path',
+      auto: 'Auto-detected',
+      none: 'No Chromium-based browser found — install Brave / Vivaldi / Chromium or set the path above.',
+    },
     profilesDir: 'Profiles data directory',
     profilesDirHelp: 'Where each profile’s user-data-dir lives.',
     troubleshoot: 'Troubleshooting',
@@ -284,8 +290,14 @@ const vi = {
     title: 'Cài đặt',
     language: 'Ngôn ngữ',
     theme: 'Giao diện',
-    chromiumPath: 'Đường dẫn Chromium / Chrome / Edge / Brave',
-    chromiumPathHelp: 'Để trống để tự động phát hiện.',
+    chromiumPath: 'Trình duyệt sử dụng (Brave / Vivaldi / ungoogled-chromium / Edge / Chrome)',
+    chromiumPathHelp:
+      'Để trống để tự dò. Thứ tự ưu tiên: Brave → Vivaldi → ungoogled-chromium → Edge → Opera → Yandex → Chrome.',
+    detectedBrowser: {
+      explicit: 'Đang dùng đường dẫn bạn nhập',
+      auto: 'Đã phát hiện',
+      none: 'Không tìm thấy trình duyệt nhân Chromium — cài Brave / Vivaldi / Chromium hoặc nhập đường dẫn ở trên.',
+    },
     profilesDir: 'Thư mục dữ liệu profile',
     profilesDirHelp: 'Nơi lưu user-data-dir của từng profile.',
     troubleshoot: 'Khắc phục sự cố',
