@@ -314,7 +314,14 @@ export interface LaunchResult {
   warning?: string
 }
 
-export async function launchProfile(profile: ProfileRecord): Promise<LaunchResult> {
+export interface LaunchOptions {
+  startUrlOverride?: string
+}
+
+export async function launchProfile(
+  profile: ProfileRecord,
+  options: LaunchOptions = {},
+): Promise<LaunchResult> {
   if (running.has(profile.id)) {
     const existing = running.get(profile.id)!
     return { pid: existing.pid }
@@ -352,7 +359,7 @@ export async function launchProfile(profile: ProfileRecord): Promise<LaunchResul
   const launchExe = await prepareLaunchExecutable(profile.id, profileDir, chromium)
   const warning = takeLastLaunchWarning() ?? undefined
 
-  const startUrl: string = profile.startUrl || DEFAULT_START_URL
+  const startUrl: string = options.startUrlOverride || profile.startUrl || DEFAULT_START_URL
 
   const args = buildArgs(profile, userDataDir, extensionDir, server, startUrl)
   const child = spawn(launchExe, args, { detached: false, stdio: 'ignore' })

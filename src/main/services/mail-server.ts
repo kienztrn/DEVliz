@@ -9,10 +9,46 @@ export interface MailStatus {
   updatedAt: number
 }
 
+export interface AutomationCommand {
+  id: string
+  type: 'gmail-rotate-unread'
+  profileId: string
+  options?: {
+    maxItems?: number
+    minOpenMs?: number
+    maxOpenMs?: number
+    minReadMs?: number
+    maxReadMs?: number
+  }
+  createdAt: number
+}
+
+export interface AutomationProgress {
+  profileId: string
+  commandId: string
+  phase:
+    | 'started'
+    | 'opening'
+    | 'reading'
+    | 'done-item'
+    | 'finished'
+    | 'no-unread'
+    | 'error'
+    | 'dismiss-popup'
+  index?: number
+  total?: number
+  subject?: string
+  message?: string
+  ts: number
+}
+
 type MailListener = (status: MailStatus) => void
+type AutomationListener = (progress: AutomationProgress) => void
 
 const statuses = new Map<string, MailStatus>()
 const listeners = new Set<MailListener>()
+const automationListeners = new Set<AutomationListener>()
+const pendingCommands = new Map<string, AutomationCommand[]>()
 let port = 0
 let secret = ''
 
@@ -20,6 +56,16 @@ function emit(status: MailStatus): void {
   for (const l of listeners) {
     try {
       l(status)
+    } catch {
+      // ignore listener errors
+    }
+  }
+}
+
+function emitProgress(progress: AutomationProgress): void {
+  for (const l of automationListeners) {
+    try {
+      l(progress)
     } catch {
       // ignore listener errors
     }
@@ -93,6 +139,77 @@ async function handleMailReport(
   send(res, 200, JSON.stringify({ ok: true }), 'application/json')
 }
 
+function handleCommandFetch(
+  req: IncomingMessage,
+  res: ServerResponse,
+  profileId: string,
+  token: string,
+): void {
+  if (token !== tokenFor(profileId)) {
+    send(res, 403, 'forbidden')
+    return
+  }
+  if (req.method !== 'GET') {
+    send(res, 405, 'method not allowed')
+    return
+  }
+  const queue = pendingCommands.get(profileId)
+  const next = queue && queue.length ? queue.shift()! : null
+  if (queue && queue.length === 0) pendingCommands.delete(profileId)
+  send(res, 200, JSON.stringify({ command: next }), 'application/json')
+}
+
+async function handleAutomationProgress(
+  req: IncomingMessage,
+  res: ServerResponse,
+  profileId: string,
+  token: string,
+): Promise<void> {
+  if (token !== tokenFor(profileId)) {
+    send(res, 403, 'forbidden')
+    return
+  }
+  if (req.method !== 'POST') {
+    send(res, 405, 'method not allowed')
+    return
+  }
+  let payload: Partial<AutomationProgress> & { commandId?: unknown; phase?: unknown }
+  try {
+    const body = await parseBody(req)
+    payload = JSON.parse(body) as typeof payload
+  } catch {
+    send(res, 400, 'bad json')
+    return
+  }
+  const phaseStr = String(payload.phase ?? '')
+  const allowedPhases: AutomationProgress['phase'][] = [
+    'started',
+    'opening',
+    'reading',
+    'done-item',
+    'finished',
+    'no-unread',
+    'error',
+    'dismiss-popup',
+  ]
+  if (!(allowedPhases as string[]).includes(phaseStr)) {
+    send(res, 400, 'bad phase')
+    return
+  }
+  const progress: AutomationProgress = {
+    profileId,
+    commandId: typeof payload.commandId === 'string' ? payload.commandId.slice(0, 64) : '',
+    phase: phaseStr as AutomationProgress['phase'],
+    index: typeof payload.index === 'number' ? payload.index : undefined,
+    total: typeof payload.total === 'number' ? payload.total : undefined,
+    subject: typeof payload.subject === 'string' ? payload.subject.slice(0, 200) : undefined,
+    message: typeof payload.message === 'string' ? payload.message.slice(0, 500) : undefined,
+    ts: Date.now(),
+  }
+  emitProgress(progress)
+  send(res, 200, JSON.stringify({ ok: true }), 'application/json')
+}
+
 async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method === 'OPTIONS') {
     send(res, 204, '')
@@ -106,6 +223,18 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   const m = url.match(/^\/api\/mail-report\/([A-Za-z0-9_-]{1,64})\/([A-Za-z0-9]{1,64})\b/)
   if (m) {
     await handleMailReport(req, res, m[1], m[2])
+    return
+  }
+  const cmd = url.match(/^\/api\/command\/([A-Za-z0-9_-]{1,64})\/([A-Za-z0-9]{1,64})\b/)
+  if (cmd) {
+    handleCommandFetch(req, res, cmd[1], cmd[2])
+    return
+  }
+  const prog = url.match(
+    /^\/api\/automation-progress\/([A-Za-z0-9_-]{1,64})\/([A-Za-z0-9]{1,64})\b/,
+  )
+  if (prog) {
+    await handleAutomationProgress(req, res, prog[1], prog[2])
     return
   }
   send(res, 404, 'not found')
@@ -163,4 +292,19 @@ export function clearMailStatus(profileId: string): void {
 export function onMailUpdate(cb: MailListener): () => void {
   listeners.add(cb)
   return () => listeners.delete(cb)
+}
+
+export function enqueueCommand(profileId: string, command: AutomationCommand): void {
+  const queue = pendingCommands.get(profileId) ?? []
+  queue.push(command)
+  pendingCommands.set(profileId, queue)
+}
+
+export function onAutomationProgress(cb: AutomationListener): () => void {
+  automationListeners.add(cb)
+  return () => automationListeners.delete(cb)
+}
+
+export function clearCommandsFor(profileId: string): void {
+  pendingCommands.delete(profileId)
 }

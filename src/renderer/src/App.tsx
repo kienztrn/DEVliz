@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard'
 import Profiles from './pages/Profiles'
 import Proxies from './pages/Proxies'
 import BulkCreate from './pages/BulkCreate'
+import Automation from './pages/Automation'
 import SettingsPage from './pages/Settings'
 import { useAppStore } from './store'
 
@@ -31,6 +32,7 @@ export default function App(): JSX.Element {
         <Route path="/profiles" element={<Profiles />} />
         <Route path="/bulk" element={<BulkCreate />} />
         <Route path="/proxies" element={<Proxies />} />
+        <Route path="/automation" element={<Automation />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
     </Routes>
