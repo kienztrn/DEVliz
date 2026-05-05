@@ -174,7 +174,7 @@ if (PROXY_AUTH) {
       'Asia/Singapore': -480, 'Asia/Hong_Kong': -480,
       'America/Los_Angeles': 480, 'America/New_York': 300, 'America/Chicago': 360,
       'Europe/London': 0, 'Europe/Berlin': -60, 'Europe/Paris': -60,
-      'Australia/Sydney': -660,
+      'Australia/Sydney': -600,
     };
     const off = offsets[FP.timezone];
     if (typeof off === 'number') {

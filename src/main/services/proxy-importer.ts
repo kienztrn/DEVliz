@@ -47,7 +47,9 @@ function parseProxyLine(line: string): CreateProxyInput | null {
   let password: string | undefined
 
   if (raw.includes('@')) {
-    const [auth, hostPart] = raw.split('@')
+    const atIdx = raw.lastIndexOf('@')
+    const auth = raw.slice(0, atIdx)
+    const hostPart = raw.slice(atIdx + 1)
     if (auth.includes(':')) {
       const [u, ...rest] = auth.split(':')
       username = u

@@ -123,8 +123,10 @@ export async function launchProfile(profile: ProfileRecord): Promise<LaunchResul
   emitStatus(profile.id, true, child.pid)
 
   child.on('exit', () => {
-    running.delete(profile.id)
-    emitStatus(profile.id, false)
+    if (running.get(profile.id)?.child === child) {
+      running.delete(profile.id)
+      emitStatus(profile.id, false)
+    }
   })
 
   return { pid: child.pid }
