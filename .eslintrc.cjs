@@ -13,5 +13,5 @@ module.exports = {
     '@typescript-eslint/explicit-function-return-type': 'off',
     '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
   },
-  ignorePatterns: ['out/', 'dist/', 'release/', 'node_modules/'],
+  ignorePatterns: ['out/', 'dist/', 'release/', 'node_modules/', 'extensions/'],
 }

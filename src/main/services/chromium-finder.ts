@@ -145,4 +145,3 @@ export function describeDetectedBrowser(explicitPath?: string | null): DetectedB
   if (auto) return { path: auto.path, brand: auto.brand, source: 'auto' }
   return { path: null, brand: null, source: 'none' }
 }
-
