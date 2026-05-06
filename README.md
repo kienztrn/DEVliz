@@ -91,6 +91,21 @@ src/
         └── pages/          # Dashboard, Profiles, Proxies, BulkCreate, Settings
 ```
 
+## Standalone Chrome extension (`extensions/gmail-auto-reader/`)
+
+If you don't need profiles / proxies and just want the Gmail rotate-unread
+behavior in your normal Chrome, this repo also ships a small standalone
+Manifest V3 extension under [`extensions/gmail-auto-reader/`](extensions/gmail-auto-reader/).
+
+- Load it via `chrome://extensions` → **Developer mode** → **Load unpacked**
+  → pick `extensions/gmail-auto-reader/`.
+- Click the toolbar icon → **Mở Gmail & Bắt đầu**.
+- It will open Gmail, find unread rows (`tr.zE` with an `aria-label$="unread"`
+  fallback), open each one for a configurable read time, and return to the
+  inbox. A floating overlay inside Gmail shows live progress and an emergency
+  Stop button.
+- 100% local — no profiles, no proxies, no network calls back to Electron.
+
 ## Requirements
 
 - Node.js 20+ and npm 10+

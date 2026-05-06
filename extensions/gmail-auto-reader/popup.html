@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Gmail Auto Reader</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <img src="icons/icon-48.png" alt="" class="logo" />
+        <div>
+          <h1>Gmail Auto Reader</h1>
+          <p class="subtitle">Tự lướt và mở email chưa đọc</p>
+        </div>
+      </header>
+
+      <div class="status-card">
+        <div class="status-row">
+          <span class="status-label">Trạng thái</span>
+          <span id="status-pill" class="pill pill-idle">Idle</span>
+        </div>
+        <div id="status-detail" class="status-detail">Sẵn sàng. Bấm Start để bắt đầu.</div>
+      </div>
+
+      <div class="form">
+        <div class="form-row">
+          <label for="readSeconds">Thời gian đọc mỗi email (giây)</label>
+          <input type="number" id="readSeconds" min="1" max="120" step="1" value="5" />
+        </div>
+        <div class="form-row">
+          <label for="maxItems">Tối đa số email</label>
+          <input type="number" id="maxItems" min="1" max="200" step="1" value="50" />
+        </div>
+        <div class="form-row checkbox-row">
+          <label>
+            <input type="checkbox" id="humanLike" checked />
+            Cadence tự nhiên (random ±20%)
+          </label>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="startBtn" class="primary" type="button">Mở Gmail &amp; Bắt đầu</button>
+        <button id="stopBtn" class="secondary" type="button">Dừng</button>
+      </div>
+
+      <footer>
+        <p class="hint">
+          Extension chạy hoàn toàn local — không gửi data đi đâu. Có overlay nhỏ trong Gmail
+          để bấm Stop khẩn cấp.
+        </p>
+      </footer>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>
