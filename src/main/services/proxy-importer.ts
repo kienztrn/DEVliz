@@ -43,33 +43,72 @@ function parseProxyLine(line: string): CreateProxyInput | null {
     raw = raw.slice(protoMatch[0].length)
   }
 
-  let username: string | undefined
-  let password: string | undefined
+  const validHostPort = (h: string, p: number): boolean =>
+    !!h && Number.isFinite(p) && p >= 1 && p <= 65535
 
+  const build = (
+    host: string,
+    port: number,
+    username?: string,
+    password?: string,
+  ): CreateProxyInput => ({ name: `${host}:${port}`, type, host, port, username, password })
+
+  // Try URL-style first when `@` is present (user:pass@host:port).
+  // Split at the LAST `@` so passwords containing `@` are preserved.
+  // If the part after `@` is not a valid host:port, fall through to the
+  // colon-only format below — handles `host:port:user:p@ss` correctly.
   if (raw.includes('@')) {
     const atIdx = raw.lastIndexOf('@')
     const auth = raw.slice(0, atIdx)
     const hostPart = raw.slice(atIdx + 1)
-    if (auth.includes(':')) {
-      const [u, ...rest] = auth.split(':')
-      username = u
-      password = rest.join(':')
+    const hostParts = hostPart.split(':')
+    if (hostParts.length === 2) {
+      const [host, portStr] = hostParts
+      const port = Number(portStr)
+      if (validHostPort(host, port)) {
+        let username: string | undefined
+        let password: string | undefined
+        const colonIdx = auth.indexOf(':')
+        if (colonIdx > 0) {
+          username = auth.slice(0, colonIdx)
+          password = auth.slice(colonIdx + 1)
+        } else if (auth) {
+          username = auth
+        }
+        return build(host, port, username, password)
+      }
     }
-    raw = hostPart
+    // fall through — likely host:port:user:pass with `@` in password
   }
 
-  const parts = raw.split(':')
-  if (parts.length === 2) {
-    const [host, portStr] = parts
-    const port = Number(portStr)
-    if (!host || !Number.isFinite(port) || port < 1 || port > 65535) return null
-    return { name: `${host}:${port}`, type, host, port, username, password }
+  // Colon-only format. Slice manually instead of `split(':')` so the password
+  // can legitimately contain `:` or `@`.
+  const firstColon = raw.indexOf(':')
+  if (firstColon <= 0) return null
+  const host = raw.slice(0, firstColon)
+  const afterHost = raw.slice(firstColon + 1)
+
+  const secondColon = afterHost.indexOf(':')
+  if (secondColon < 0) {
+    // host:port
+    const port = Number(afterHost)
+    if (!validHostPort(host, port)) return null
+    return build(host, port)
   }
-  if (parts.length === 4) {
-    const [host, portStr, u, p] = parts
-    const port = Number(portStr)
-    if (!host || !Number.isFinite(port) || port < 1 || port > 65535) return null
-    return { name: `${host}:${port}`, type, host, port, username: u, password: p }
+
+  const portStr = afterHost.slice(0, secondColon)
+  const port = Number(portStr)
+  if (!validHostPort(host, port)) return null
+
+  const userPass = afterHost.slice(secondColon + 1)
+  if (!userPass) return build(host, port)
+
+  const userColon = userPass.indexOf(':')
+  if (userColon <= 0) {
+    // host:port:user (no password)
+    return build(host, port, userPass)
   }
-  return null
+  const username = userPass.slice(0, userColon)
+  const password = userPass.slice(userColon + 1)
+  return build(host, port, username, password)
 }
